@@ -1,8 +1,12 @@
 [package]
-name = "hawkeye"
+name = "finch"
 version = "0.1.0"
 authors = ["Roderick Bovee <roderick@onecodex.com>"]
 
 [dependencies]
-murmurhash3 = "0.0.5"
-needletail = { version = "~0.1.0", git = "https://github.com/bovee/needletail" }
+clap = "~2.19.0"
+murmurhash3 = "~0.0.5"
+needletail = { version = "~0.1.0", git = "https://github.com/bovee/needletail", rev="fb3c805095eed7adf3155c0c038ce80091ede487" }
+serde = "0.8"
+serde_derive = "0.8"
+serde_json = "0.8"
