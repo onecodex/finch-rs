@@ -53,7 +53,11 @@ fn main() {
         .about("Compute distanes between MASH sketches")
         .arg(Arg::with_name("INPUT")
              .help("Sketchfile to make comparisons for")
-             .required(true));
+             .required(true))
+        .arg(Arg::with_name("mash_mode")
+             .short("m")
+             .long("mash")
+             .help("Calculate distances as Mash"));
 
     let matches = App::new("finch").version("0.1.0")
         .author("Roderick Bovee <roderick@onecodex.com>")
@@ -92,6 +96,7 @@ fn main() {
         };
     } else if let Some(matches) = matches.subcommand_matches("dist") {
         let filename = matches.value_of("INPUT").unwrap();
+        let mash_mode = matches.is_present("mash_mode");
         let file = match File::open(filename) {
             Ok(v) => v,
             Err(e) => panic!("Error opening file: {}", e),
@@ -107,8 +112,15 @@ fn main() {
                     continue;
                 }
                 let sketch2 = &raw_sketch2.get_kmers().unwrap();
-                let distance = distance(&sketch1, &sketch2, true).unwrap();
-                println!("Distance from {} to {}: {}", raw_sketch1.name, raw_sketch2.name, distance);
+                let distance_metrics = distance(&sketch1, &sketch2, mash_mode).unwrap();
+                let distance = distance_metrics.0;
+                let jaccard = distance_metrics.1;
+                let common = distance_metrics.2;
+                let total = distance_metrics.3;
+                println!(
+                    "Distance from {} to {}: {} (J{} {}/{})",
+                    raw_sketch1.name, raw_sketch2.name, distance, jaccard, common, total
+                );
             }
         }
     }
@@ -133,17 +145,25 @@ fn mash_file(filename: &Path, n_hashes: usize, kmer_length: u8) -> JSONSketch {
     let mut minhash = MinHashKmers::new(n_hashes);
     let mut seq_len = 0u64;
     fastx_file(filename.to_str().unwrap(), |seq| {
-        for kmer in seq.1.windows(kmer_length as usize) {
-            if !has_no_n(kmer) {
-                continue;
+        if !has_no_n(&seq.1) {
+            // TODO: write a "no N" kmer iterator
+            for kmer in seq.1.windows(kmer_length as usize) {
+                if !has_no_n(kmer) {
+                    continue;
+                }
+                minhash.push(&canonical(kmer));
             }
-            minhash.push(&canonical(kmer));
+            seq_len += seq.1.len() as u64;
+        } else {
+            for kmer in seq.1.windows(kmer_length as usize) {
+                minhash.push(&canonical(kmer));
+            }
+            seq_len += seq.1.len() as u64;
         }
-        seq_len += seq.1.len() as u64;
     });
 
     let hashes = minhash.into_vec();
-    // TODO: directory should be clipped from filename
+    // directory should be clipped from filename
     let basename = filename.file_name().unwrap();
     JSONSketch::new(basename.to_str().unwrap(), seq_len, hashes)
 }

@@ -1,7 +1,7 @@
 use minhashes::{KmerCount};
 
 
-pub fn distance(sketch1: &Vec<KmerCount>, sketch2: &Vec<KmerCount>, mash_mode: bool) -> Result<f64, &'static str> {
+pub fn distance(sketch1: &Vec<KmerCount>, sketch2: &Vec<KmerCount>, mash_mode: bool) -> Result<(f64, f64, u64, u64), &'static str> {
     if sketch1[0].kmer.1 != sketch2[0].kmer.1 {
         return Err("Sketches have different sized kmers");
     }
@@ -13,12 +13,14 @@ pub fn distance(sketch1: &Vec<KmerCount>, sketch2: &Vec<KmerCount>, mash_mode: b
     }
     let containment = distances.0;
     let jaccard = distances.1;
+    let common = distances.2;
+    let total = distances.3;
     let mash_distance: f64 = -1.0 * ((2.0 * jaccard) / (1.0 + jaccard)).ln() / sketch1[0].kmer.1 as f64;
-    Ok(f64::min(1f64, f64::max(0f64, mash_distance)))
+    Ok((f64::min(1f64, f64::max(0f64, mash_distance)), jaccard, common, total))
 }
 
 
-fn calc_distance_mash(sketch1: &Vec<KmerCount>, sketch2: &Vec<KmerCount>) -> (f64, f64) {
+fn calc_distance_mash(sketch1: &Vec<KmerCount>, sketch2: &Vec<KmerCount>) -> (f64, f64, u64, u64) {
     let mut i: usize = 0;
     let mut j: usize = 0;
     let mut common: u64 = 0;
@@ -54,17 +56,17 @@ fn calc_distance_mash(sketch1: &Vec<KmerCount>, sketch2: &Vec<KmerCount>) -> (f6
 
     let containment: f64 = common as f64 / i as f64;
     let jaccard: f64 = common as f64 / total as f64;
-    (containment, jaccard)
+    (containment, jaccard, common, total)
 }
 
 
-fn calc_distance(sketch1: &Vec<KmerCount>, sketch2: &Vec<KmerCount>) -> (f64, f64) {
+fn calc_distance(sketch1: &Vec<KmerCount>, sketch2: &Vec<KmerCount>) -> (f64, f64, u64, u64) {
     let mut j: usize = 0;
     let mut common: u64 = 0;
     let mut total: u64 = 0;
-
+    
     for i in 0..sketch1.len() {
-        while (sketch2[j].hash < sketch1[i].hash) && (j < sketch2.len()) {
+        while (sketch2[j].hash < sketch1[i].hash) && (j < sketch2.len() - 1) {
             j += 1;
         }
         
@@ -78,6 +80,6 @@ fn calc_distance(sketch1: &Vec<KmerCount>, sketch2: &Vec<KmerCount>) -> (f64, f6
     // Numerator is A-intersect-B, |A| is the denominator, we enforce |A| == |B|
     let containment: f64 = common as f64 / total as f64;
     let jaccard: f64 = common as f64 / (common + 2 * (total - common)) as f64;
-    (containment, jaccard)
+    (containment, jaccard, common, total)
 }
 

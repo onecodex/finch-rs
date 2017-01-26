@@ -34,13 +34,13 @@ impl<T> Eq for HashedItem<T> {}
 
 impl<T> Ord for HashedItem<T> {
     fn cmp(&self, other: &HashedItem<T>) -> Ordering {
-        other.hash.cmp(&self.hash)
+        self.hash.cmp(&other.hash)
     }
 }
 
 impl<T> PartialOrd for HashedItem<T> {
     fn partial_cmp(&self, other: &HashedItem<T>) -> Option<Ordering> {
-        Some(self.cmp(other))
+        Some(self.hash.cmp(&other.hash))
     }
 }
 
@@ -98,23 +98,17 @@ impl MinHashKmers {
     }
 
     pub fn push(&mut self, kmer: &[u8]) {
-        //! This computes a 2-bit form of each kmer to store alongside the hash.
-        //! If you already have this "reduced" form, you can pass both through
-        //! with fast_push below.
-        self.fast_push(kmer, str_to_bitmer(kmer));
-    }
-
-    pub fn fast_push(&mut self, kmer: &[u8], ikmer: BitKmer) {
         let new_hash = hash_f(kmer);
-        let new_hash_item = HashedItem {
-            hash: new_hash,
-            item: ikmer,
-        };
         let add_hash = match self.hashes.peek() {
             None => true,
-            Some(old_max_hash) => new_hash_item <= *old_max_hash,
+            Some(old_max_hash) => (new_hash <= (*old_max_hash).hash) || (self.hashes.len() < self.size),
         };
+
         if add_hash {
+            let new_hash_item = HashedItem {
+                hash: new_hash,
+                item: str_to_bitmer(kmer),
+            };
             if self.counts.contains_key(&new_hash) {
                 self.map_lock.lock().unwrap();
                 let count = self.counts.entry(new_hash).or_insert(0u16);
@@ -133,7 +127,6 @@ impl MinHashKmers {
 
     pub fn into_vec(self) -> Vec<KmerCount> {
         let mut vec = self.hashes.into_sorted_vec();
-        vec.reverse();
 
         let mut results = Vec::with_capacity(vec.len());
         for item in &vec {
@@ -160,4 +153,25 @@ fn test_minhashkmers() {
     assert_eq!(array[0].count, 1u16);
     assert_eq!(array[1].kmer.0, 1u64);
     assert_eq!(array[1].count, 2u16);
+}
+
+#[test]
+fn test_longer_sequence() {
+    let mut queue = MinHashKmers::new(100);
+
+    // for "ACACGGAAATCCTCACGTCGCGGCGCCGGGC"
+
+    // hashes should be:
+    //     (3186265289206375993,
+    //      3197567229193635484,
+    //      5157287830980272133,
+    //      7515070071080094037,
+    //      9123665698461883699,
+    //      9650810550987401968,
+    //      10462414310441547028,
+    //      12872951831549606632,
+    //      13584836512372089324,
+    //      14093285637546356047,
+    //      16069721578136260683)
+
 }

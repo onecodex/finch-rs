@@ -10,3 +10,6 @@ needletail = { version = "~0.1.0", git = "https://github.com/bovee/needletail", 
 serde = "0.8"
 serde_derive = "0.8"
 serde_json = "0.8"
+
+[profile.release]
+debug = true
