@@ -105,15 +105,15 @@ impl MinHashKmers {
         };
 
         if add_hash {
-            let new_hash_item = HashedItem {
-                hash: new_hash,
-                item: str_to_bitmer(kmer),
-            };
             if self.counts.contains_key(&new_hash) {
                 self.map_lock.lock().unwrap();
                 let count = self.counts.entry(new_hash).or_insert(0u16);
                 *count += 1;
             } else {
+                let new_hash_item = HashedItem {
+                    hash: new_hash,
+                    item: str_to_bitmer(kmer),
+                };
                 self.heap_lock.lock().unwrap();
                 self.hashes.push(new_hash_item);
                 self.counts.insert(new_hash, 1u16);

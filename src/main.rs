@@ -13,7 +13,7 @@ extern crate serde_json;
 
 use clap::{App, Arg, SubCommand};
 use needletail::fastx::fastx_file;
-use needletail::kmer::{canonical, has_no_n};
+use needletail::kmer::{canonical, has_no_n, normalize};
 
 mod distance;
 mod minhashes;
@@ -145,21 +145,21 @@ fn mash_file(filename: &Path, n_hashes: usize, kmer_length: u8) -> JSONSketch {
     let mut minhash = MinHashKmers::new(n_hashes);
     let mut seq_len = 0u64;
     fastx_file(filename.to_str().unwrap(), |seq| {
-        if !has_no_n(&seq.1) {
-            // TODO: write a "no N" kmer iterator
-            for kmer in seq.1.windows(kmer_length as usize) {
+        let norm_seq = normalize(&seq.1, false);
+        if !has_no_n(&norm_seq) {
+            // TODO: write a "no N" kmer iterator (with normalization)
+            for kmer in norm_seq.windows(kmer_length as usize) {
                 if !has_no_n(kmer) {
                     continue;
                 }
                 minhash.push(&canonical(kmer));
             }
-            seq_len += seq.1.len() as u64;
         } else {
-            for kmer in seq.1.windows(kmer_length as usize) {
+            for kmer in norm_seq.windows(kmer_length as usize) {
                 minhash.push(&canonical(kmer));
             }
-            seq_len += seq.1.len() as u64;
         }
+        seq_len += norm_seq.len() as u64;
     });
 
     let hashes = minhash.into_vec();
