@@ -160,7 +160,7 @@ fn mash_file(filename: &Path, n_hashes: usize, kmer_length: u8) -> JSONSketch {
             }
         }
         seq_len += norm_seq.len() as u64;
-    });
+    }).unwrap();
 
     let hashes = minhash.into_vec();
     // directory should be clipped from filename
