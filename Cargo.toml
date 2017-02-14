@@ -6,10 +6,10 @@ authors = ["Roderick Bovee <roderick@onecodex.com>"]
 [dependencies]
 clap = "~2.19.0"
 murmurhash3 = "~0.0.5"
-needletail = { version = "~0.1.0", git = "https://github.com/bovee/needletail", rev="842f6af74a67f396761dfd63aec9bbfcc637676a" }
-serde = "0.8"
-serde_derive = "0.8"
-serde_json = "0.8"
+needletail = { version="~0.1.0", git="https://github.com/bovee/needletail", rev="059c369c8a4d8d74dfa66473192c2357f0f6683f"}
+serde = "0.9"
+serde_derive = "0.9"
+serde_json = "0.9"
 
 [profile.release]
 debug = true

@@ -7,5 +7,6 @@ extern crate serde;
 extern crate serde_json;
 
 pub mod minhashes;
+pub mod filtering;
 pub mod distance;
 pub mod serialization;

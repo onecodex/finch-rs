@@ -12,8 +12,8 @@ use needletail::bitkmer::{BitKmer, str_to_bitmer};
 pub type ItemHash = usize;
 
 #[inline]
-pub fn hash_f(item: &[u8]) -> ItemHash {
-    murmurhash3_x64_128(item, 42).0 as ItemHash
+pub fn hash_f(item: &[u8], seed: u64) -> ItemHash {
+    murmurhash3_x64_128(item, seed).0 as ItemHash
 }
 
 
@@ -70,7 +70,7 @@ impl Hasher for NoHashHasher {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct KmerCount {
     pub hash: ItemHash,
     pub kmer: BitKmer,
@@ -82,23 +82,26 @@ pub struct MinHashKmers {
     hashes: BinaryHeap<HashedItem<BitKmer>>,
     counts: HashMap<ItemHash, u16, BuildHasherDefault<NoHashHasher>>,
     size: usize,
+    seed: u64,
     heap_lock: Mutex<()>,
+    // instead of map_lock, look into using https://docs.rs/chashmap/0.1.2/chashmap/
     map_lock: Mutex<()>,
 }
 
 impl MinHashKmers {
-    pub fn new(size: usize) -> Self {
+    pub fn new(size: usize, seed: u64) -> Self {
         MinHashKmers {
             hashes: BinaryHeap::with_capacity(size + 1),
             counts: HashMap::with_capacity_and_hasher(size, BuildHasherDefault::default()),
             size: size,
+            seed: seed,
             heap_lock: Mutex::new(()),
             map_lock: Mutex::new(()),
         }
     }
 
     pub fn push(&mut self, kmer: &[u8]) {
-        let new_hash = hash_f(kmer);
+        let new_hash = hash_f(kmer, self.seed);
         let add_hash = match self.hashes.peek() {
             None => true,
             Some(old_max_hash) => (new_hash <= (*old_max_hash).hash) || (self.hashes.len() < self.size),
@@ -106,16 +109,15 @@ impl MinHashKmers {
 
         if add_hash {
             if self.counts.contains_key(&new_hash) {
-                self.map_lock.lock().unwrap();
+                let _ = self.map_lock.lock().unwrap();
                 let count = self.counts.entry(new_hash).or_insert(0u16);
                 *count += 1;
             } else {
-                let new_hash_item = HashedItem {
+                let _ = self.heap_lock.lock().unwrap();
+                self.hashes.push(HashedItem {
                     hash: new_hash,
                     item: str_to_bitmer(kmer),
-                };
-                self.heap_lock.lock().unwrap();
-                self.hashes.push(new_hash_item);
+                });
                 self.counts.insert(new_hash, 1u16);
                 if self.hashes.len() > self.size {
                     let hash = self.hashes.pop().unwrap();
@@ -126,7 +128,7 @@ impl MinHashKmers {
     }
 
     pub fn into_vec(self) -> Vec<KmerCount> {
-        let mut vec = self.hashes.into_sorted_vec();
+        let vec = self.hashes.into_sorted_vec();
 
         let mut results = Vec::with_capacity(vec.len());
         for item in &vec {
@@ -143,21 +145,23 @@ impl MinHashKmers {
 
 #[test]
 fn test_minhashkmers() {
-    let mut queue = MinHashKmers::new(2);
+    let mut queue = MinHashKmers::new(3, 42);
     queue.push(b"ca");
     queue.push(b"cc");
     queue.push(b"ac");
     queue.push(b"ac");
     let array = queue.into_vec();
-    assert_eq!(array[0].kmer.0, 4u64);
+    assert_eq!(array[0].kmer.0, 5u64);
     assert_eq!(array[0].count, 1u16);
-    assert_eq!(array[1].kmer.0, 1u64);
-    assert_eq!(array[1].count, 2u16);
+    assert_eq!(array[1].kmer.0, 4u64);
+    assert_eq!(array[1].count, 1u16);
+    assert_eq!(array[2].kmer.0, 1u64);
+    assert_eq!(array[2].count, 2u16);
 }
 
 #[test]
 fn test_longer_sequence() {
-    let mut queue = MinHashKmers::new(100);
+    let mut queue = MinHashKmers::new(100, 42);
 
     // for "ACACGGAAATCCTCACGTCGCGGCGCCGGGC"
 

@@ -3,20 +3,34 @@ use needletail::bitkmer::{str_to_bitmer, bitmer_to_str};
 
 use minhashes::{KmerCount, hash_f};
 
+#[allow(non_snake_case)]
+#[derive(Serialize, Deserialize)]
+pub struct JSONMultiSketch {
+    pub kmer: u8,
+    pub alphabet: String,
+    pub preserveCase: bool,
+    pub canonical: bool,
+    pub sketchSize: u32,
+    pub hashType: String,
+    pub hashBits: u16,
+    pub hashSeed: u64,
+    pub sketches: Vec<JSONSketch>,
+}
 
+#[allow(non_snake_case)]
 #[derive(Deserialize, Eq, PartialEq, Serialize)]
 pub struct JSONSketch {
     pub name: String,
-    length: Option<u64>,
+    seqLength: Option<u64>,
     comment: Option<String>,
-    metadata: Option<HashMap<String, String>>,
+    filters: Option<HashMap<String, String>>,
     hashes: Vec<String>,
     kmers: Option<Vec<String>>,
     counts: Option<Vec<u16>>,
 }
 
 impl JSONSketch {
-    pub fn new(name: &str, length: u64, kmercounts: Vec<KmerCount>) -> Self {
+    pub fn new(name: &str, length: u64, kmercounts: Vec<KmerCount>, filters: &HashMap<String, String>) -> Self {
         let mut hash_list = Vec::with_capacity(kmercounts.len());
         let mut kmer_list = Vec::with_capacity(kmercounts.len());
         let mut count_list = Vec::with_capacity(kmercounts.len());
@@ -27,13 +41,17 @@ impl JSONSketch {
         }
         JSONSketch {
             name: String::from(name),
-            length: Some(length),
+            seqLength: Some(length),
             comment: Some(String::from("")),
-            metadata: Some(HashMap::new()),
+            filters: Some(filters.clone()),
             hashes: hash_list,
             kmers: Some(kmer_list),
             counts: Some(count_list),
         }
+    }
+
+    pub fn len(&self) -> usize {
+        self.hashes.len()
     }
 
     pub fn get_kmers(&self) -> Option<Vec<KmerCount>> {
@@ -95,7 +113,8 @@ impl BinarySketch {
             let bitmer = (*self.kmers)[i as usize];
             let kmer = &bitmer_to_str((bitmer, self.kmer_size));
             kmercounts.push(KmerCount {
-                hash: hash_f(&kmer.as_bytes()),
+                // there's an assumption here that the seed is 42
+                hash: hash_f(&kmer.as_bytes(), 42),
                 kmer: (bitmer, self.kmer_size),
                 count: (*self.counts)[i as usize],
             });
