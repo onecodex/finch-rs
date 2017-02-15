@@ -2,7 +2,7 @@ use minhashes::{KmerCount};
 
 
 pub fn distance(sketch1: &Vec<KmerCount>, sketch2: &Vec<KmerCount>, mash_mode: bool) -> Result<(f64, f64, u64, u64), &'static str> {
-    if sketch1[0].kmer.1 != sketch2[0].kmer.1 {
+    if sketch1[0].kmer.len() != sketch2[0].kmer.len() {
         return Err("Sketches have different sized kmers");
     }
     let distances;
@@ -15,7 +15,7 @@ pub fn distance(sketch1: &Vec<KmerCount>, sketch2: &Vec<KmerCount>, mash_mode: b
     let jaccard = distances.1;
     let common = distances.2;
     let total = distances.3;
-    let mash_distance: f64 = -1.0 * ((2.0 * jaccard) / (1.0 + jaccard)).ln() / sketch1[0].kmer.1 as f64;
+    let mash_distance: f64 = -1.0 * ((2.0 * jaccard) / (1.0 + jaccard)).ln() / sketch1[0].kmer.len() as f64;
     Ok((f64::min(1f64, f64::max(0f64, mash_distance)), jaccard, common, total))
 }
 

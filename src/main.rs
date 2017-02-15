@@ -279,7 +279,6 @@ fn mash_file(filename: &Path, n_hashes: usize, final_size: usize, kmer_length: u
         hashes = filtered_hashes;
         filter_stats.insert(String::from("minCopies"), cutoff.to_string());
     }
-    // TODO: throw error if sketch size < final_size?
 
     // directory should be clipped from filename
     let basename = filename.file_name().unwrap();

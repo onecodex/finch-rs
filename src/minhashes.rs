@@ -73,19 +73,19 @@ impl Hasher for NoHashHasher {
 #[derive(Debug, Clone)]
 pub struct KmerCount {
     pub hash: ItemHash,
-    pub kmer: BitKmer,
+    pub kmer: Vec<u8>,
     pub count: u16,
 }
 
 
 pub struct MinHashKmers {
-    hashes: BinaryHeap<HashedItem<BitKmer>>,
+    hashes: BinaryHeap<HashedItem<Vec<u8>>>,
     counts: HashMap<ItemHash, u16, BuildHasherDefault<NoHashHasher>>,
     size: usize,
     seed: u64,
-    heap_lock: Mutex<()>,
+    // heap_lock: Mutex<()>,
     // instead of map_lock, look into using https://docs.rs/chashmap/0.1.2/chashmap/
-    map_lock: Mutex<()>,
+    // map_lock: Mutex<()>,
 }
 
 impl MinHashKmers {
@@ -95,8 +95,8 @@ impl MinHashKmers {
             counts: HashMap::with_capacity_and_hasher(size, BuildHasherDefault::default()),
             size: size,
             seed: seed,
-            heap_lock: Mutex::new(()),
-            map_lock: Mutex::new(()),
+            // heap_lock: Mutex::new(()),
+            // map_lock: Mutex::new(()),
         }
     }
 
@@ -109,14 +109,14 @@ impl MinHashKmers {
 
         if add_hash {
             if self.counts.contains_key(&new_hash) {
-                let _ = self.map_lock.lock().unwrap();
+                // let _ = self.map_lock.lock().unwrap();
                 let count = self.counts.entry(new_hash).or_insert(0u16);
                 *count += 1;
             } else {
-                let _ = self.heap_lock.lock().unwrap();
+                // let _ = self.heap_lock.lock().unwrap();
                 self.hashes.push(HashedItem {
                     hash: new_hash,
-                    item: str_to_bitmer(kmer),
+                    item: kmer.to_owned(),
                 });
                 self.counts.insert(new_hash, 1u16);
                 if self.hashes.len() > self.size {
@@ -128,10 +128,10 @@ impl MinHashKmers {
     }
 
     pub fn into_vec(self) -> Vec<KmerCount> {
-        let vec = self.hashes.into_sorted_vec();
+        let mut vec = self.hashes.into_sorted_vec();
 
         let mut results = Vec::with_capacity(vec.len());
-        for item in &vec {
+        for item in vec.drain(..) {
             let new_item = KmerCount {
                 hash: item.hash,
                 kmer: item.item,
