@@ -1,7 +1,8 @@
-use minhashes::{KmerCount};
+use minhashes::KmerCount;
+use serialization::SketchDistance;
 
 
-pub fn distance(sketch1: &Vec<KmerCount>, sketch2: &Vec<KmerCount>, mash_mode: bool) -> Result<(f64, f64, u64, u64), &'static str> {
+pub fn distance(sketch1: &Vec<KmerCount>, sketch2: &Vec<KmerCount>, sketch1_name: &str, sketch2_name: &str, mash_mode: bool) -> Result<SketchDistance, &'static str> {
     if sketch1[0].kmer.len() != sketch2[0].kmer.len() {
         return Err("Sketches have different sized kmers");
     }
@@ -16,7 +17,15 @@ pub fn distance(sketch1: &Vec<KmerCount>, sketch2: &Vec<KmerCount>, mash_mode: b
     let common = distances.2;
     let total = distances.3;
     let mash_distance: f64 = -1.0 * ((2.0 * jaccard) / (1.0 + jaccard)).ln() / sketch1[0].kmer.len() as f64;
-    Ok((f64::min(1f64, f64::max(0f64, mash_distance)), jaccard, common, total))
+    Ok(SketchDistance {
+        containment: distances.0,
+        jaccard: distances.1,
+        mashDistance: f64::min(1f64, f64::max(0f64, mash_distance)),
+        common_hashes: common,
+        total_hashes: total,
+        query: sketch1_name.to_string(),
+        reference: sketch2_name.to_string(),
+    })
 }
 
 
@@ -82,4 +91,3 @@ fn calc_distance(sketch1: &Vec<KmerCount>, sketch2: &Vec<KmerCount>) -> (f64, f6
     let jaccard: f64 = common as f64 / (common + 2 * (total - common)) as f64;
     (containment, jaccard, common, total)
 }
-
