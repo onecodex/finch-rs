@@ -6,7 +6,7 @@ use minhashes::{KmerCount};
 ///
 /// Useful for removing, e.g. kmers containing sequencing errors
 ///
-pub fn filter_sketch(sketch: &[KmerCount], filter_level: f32, final_size: usize) -> (Vec<KmerCount>, u16, usize) {
+pub fn filter_sketch(sketch: &[KmerCount], filter_level: f32) -> (Vec<KmerCount>, u16) {
     let hist_data = hist(sketch);
     let total_counts = hist_data.iter().enumerate().map(|t| (t.0 as u64 + 1) * t.1).sum::<u64>() as f32;
     let cutoff_amt = filter_level * total_counts;
@@ -22,57 +22,51 @@ pub fn filter_sketch(sketch: &[KmerCount], filter_level: f32, final_size: usize)
         cutoff += 1;
     }
 
-    filter_abs(sketch, cutoff, final_size)
+    filter_abs(sketch, cutoff)
 }
 
-pub fn filter_abs(sketch: &[KmerCount], cov_cutoff: u16, final_size: usize) -> (Vec<KmerCount>, u16, usize) {
+pub fn filter_abs(sketch: &[KmerCount], cov_cutoff: u16) -> (Vec<KmerCount>, u16) {
     let mut filtered = Vec::new();
-    let mut postfilter_size = 0;
     for kmer in sketch {
         if kmer.count >= cov_cutoff {
-            if filtered.len() < final_size {
-                filtered.push(kmer.clone());
-            }
-            postfilter_size += 1;
+            filtered.push(kmer.clone());
         }
     }
 
-    (filtered, cov_cutoff, postfilter_size)
+    (filtered, cov_cutoff)
 }
 
 
 #[test]
 fn test_filter_sketch() {
     let sketch = vec![
-        KmerCount {hash: 1, kmer: (0, 0), count: 1},
-        KmerCount {hash: 2, kmer: (0, 0), count: 1},
+        KmerCount {hash: 1, kmer: vec![], count: 1},
+        KmerCount {hash: 2, kmer: vec![], count: 1},
     ];
-    let (filtered, cutoff, size) = filter_sketch(&sketch, 0.2, 4);
+    let (filtered, cutoff) = filter_sketch(&sketch, 0.2);
     assert_eq!(filtered.len(), 2);
     assert_eq!(cutoff, 1);
 
     let sketch = vec![
-        KmerCount {hash: 1, kmer: (0, 0), count: 1},
-        KmerCount {hash: 2, kmer: (0, 0), count: 9},
+        KmerCount {hash: 1, kmer: vec![], count: 1},
+        KmerCount {hash: 2, kmer: vec![], count: 9},
     ];
-    let (filtered, cutoff, size) = filter_sketch(&sketch, 0.2, 4);
+    let (filtered, cutoff) = filter_sketch(&sketch, 0.2);
     assert_eq!(filtered.len(), 1);
     assert_eq!(filtered[0].hash, 2);
     assert_eq!(cutoff, 9);
 
     let sketch = vec![
-        KmerCount {hash: 1, kmer: (0, 0), count: 1},
-        KmerCount {hash: 2, kmer: (0, 0), count: 10},
-        KmerCount {hash: 3, kmer: (0, 0), count: 10},
-        KmerCount {hash: 4, kmer: (0, 0), count: 9},
+        KmerCount {hash: 1, kmer: vec![], count: 1},
+        KmerCount {hash: 2, kmer: vec![], count: 10},
+        KmerCount {hash: 3, kmer: vec![], count: 10},
+        KmerCount {hash: 4, kmer: vec![], count: 9},
     ];
-    let (filtered, cutoff, size) = filter_sketch(&sketch, 0.1, 2);
-    assert_eq!(filtered.len(), 2);
+    let (filtered, cutoff) = filter_sketch(&sketch, 0.1);
+    assert_eq!(filtered.len(), 3);
     assert_eq!(filtered[0].hash, 2);
     assert_eq!(filtered[1].hash, 3);
     assert_eq!(cutoff, 9);
-    // 3 hashes would have been included, but we set a max size
-    assert_eq!(size, 3);
 }
 
 
@@ -96,9 +90,9 @@ pub fn hist(sketch: &[KmerCount]) -> Vec<u64> {
 #[test]
 fn test_hist() {
     let sketch = vec![
-        KmerCount {hash: 1, kmer: (0, 0), count: 1},
-        KmerCount {hash: 2, kmer: (0, 0), count: 1},
-        KmerCount {hash: 3, kmer: (0, 0), count: 1},
+        KmerCount {hash: 1, kmer: vec![], count: 1},
+        KmerCount {hash: 2, kmer: vec![], count: 1},
+        KmerCount {hash: 3, kmer: vec![], count: 1},
     ];
 
     let hist_data = hist(&sketch);
@@ -106,10 +100,10 @@ fn test_hist() {
     assert_eq!(hist_data[0], 3);
 
     let sketch = vec![
-        KmerCount {hash: 1, kmer: (0, 0), count: 4},
-        KmerCount {hash: 2, kmer: (0, 0), count: 2},
-        KmerCount {hash: 3, kmer: (0, 0), count: 4},
-        KmerCount {hash: 4, kmer: (0, 0), count: 3},
+        KmerCount {hash: 1, kmer: vec![], count: 4},
+        KmerCount {hash: 2, kmer: vec![], count: 2},
+        KmerCount {hash: 3, kmer: vec![], count: 4},
+        KmerCount {hash: 4, kmer: vec![], count: 3},
     ];
 
     let hist_data = hist(&sketch);

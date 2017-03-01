@@ -2,10 +2,8 @@ use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap};
 use std::hash::{Hasher, BuildHasherDefault};
 use std::usize;
-use std::sync::Mutex;
 
 use murmurhash3::murmurhash3_x64_128;
-use needletail::bitkmer::{BitKmer, str_to_bitmer};
 
 
 // The individual items to store in the BinaryHeap
@@ -151,11 +149,13 @@ fn test_minhashkmers() {
     queue.push(b"ac");
     queue.push(b"ac");
     let array = queue.into_vec();
-    assert_eq!(array[0].kmer.0, 5u64);
+    assert_eq!(array[0].kmer, vec![b'c', b'c']);
     assert_eq!(array[0].count, 1u16);
-    assert_eq!(array[1].kmer.0, 4u64);
+    assert!(array[0].hash < array[1].hash);
+    assert_eq!(array[1].kmer, vec![b'c', b'a']);
     assert_eq!(array[1].count, 1u16);
-    assert_eq!(array[2].kmer.0, 1u64);
+    assert!(array[1].hash < array[2].hash);
+    assert_eq!(array[2].kmer, vec![b'a', b'c']);
     assert_eq!(array[2].count, 2u16);
 }
 

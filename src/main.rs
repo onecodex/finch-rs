@@ -14,7 +14,7 @@ extern crate serde;
 extern crate serde_json;
 
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
-use needletail::fastx::fastx_file;
+use needletail::fastx::fastx_cli;
 use needletail::seq::Seq;
 use needletail::kmer::normalize;
 
@@ -72,7 +72,7 @@ macro_rules! add_kmer_options {
              .long("seed")
              .help("Seed murmurhash with this value")
              .takes_value(true)
-             .default_value("42"))
+             .default_value("0"))
         .arg(Arg::with_name("kmer_length")
              .short("k")
              .long("kmer-length")
@@ -82,7 +82,12 @@ macro_rules! add_kmer_options {
         .arg(Arg::with_name("filter")
              .short("f")
              .long("filter")
-             .help("Filter kmers with an cumulative abundance lower than this out")
+             .help("Filter out kmers with an cumulative abundance lower than this")
+             .takes_value(true)
+             .default_value("1.0"))
+        .arg(Arg::with_name("strand_filter")
+             .long("strand-filter")
+             .help("Filter out kmers with a forward/reverse ratio lower than this")
              .takes_value(true)
              .default_value("1.0"))
         .arg(Arg::with_name("oversketch")
@@ -235,16 +240,26 @@ fn main() {
 }
 
 
-fn mash_files(filenames: Vec<&str>, n_hashes: usize, final_size: usize, kmer_length: u8, filter: f32, no_strict: bool, seed: u64) -> Result<JSONMultiSketch, String> {
+fn mash_files(filenames: Vec<&str>, n_hashes: usize, final_size: usize, kmer_length: u8, filters: &mut FilterParams, no_strict: bool, seed: u64) -> Result<JSONMultiSketch, String> {
     let mut sketches = Vec::with_capacity(filenames.len());
     for filename in &filenames {
         let mut minhash = MinHashKmers::new(n_hashes, seed);
         let mut seq_len = 0u64;
         let path = Path::new(filename);
-        fastx_file(path.to_str().ok_or("Couldn't make path into string")?, |seq| {
+        fastx_cli(path.to_str().ok_or("Couldn't make path into string")?, |seq_type| {
+            // disable filtering for FASTA files unless it was explicitly specified
+            if seq_type == "FASTA" {
+                if !filters.abun_filter_specified {
+                    filters.abun_filter = 0f32;
+                }
+                if !filters.strand_filter_specified {
+                    filters.strand_filter = 0f32;
+                }
+            }
+        }, |seq| {
             let norm_seq = normalize(&seq.1, false);
             let mut norm_seq = Seq::new(&norm_seq);
-            for kmer in norm_seq.canonical_kmers(kmer_length) {
+            for (kmer, _) in norm_seq.canonical_kmers(kmer_length) {
                 minhash.push(kmer);
             }
             seq_len += seq.1.len() as u64;
@@ -252,11 +267,17 @@ fn mash_files(filenames: Vec<&str>, n_hashes: usize, final_size: usize, kmer_len
 
         let mut hashes = minhash.into_vec();
         let mut filter_stats: HashMap<String, String> = HashMap::new();
-        if filter > 0f32 {
-            let (filtered_hashes, cutoff, _) = filter_sketch(&hashes, filter, final_size);
+        if filters.abun_filter > 0f32 {
+            let (filtered_hashes, cutoff) = filter_sketch(&hashes, filters.abun_filter);
             hashes = filtered_hashes;
+            filter_stats.insert(String::from("abunFilter"), filters.abun_filter.to_string());
             filter_stats.insert(String::from("minCopies"), cutoff.to_string());
         }
+
+        if filters.strand_filter > 0f32 {
+            filter_stats.insert(String::from("strandFilter"), filters.strand_filter.to_string());
+        }
+        hashes.truncate(final_size);
 
         // directory should be clipped from filename
         let basename = path.file_name().ok_or("Couldn't get filename from path")?;
@@ -293,25 +314,40 @@ fn open_mash_files(filenames: Vec<&str>, matches: &ArgMatches) -> Result<JSONMul
     Ok(all_sketch_objs)
 }
 
+struct FilterParams {
+    abun_filter: f32,
+    abun_filter_specified: bool,
+    strand_filter: f32,
+    strand_filter_specified: bool,
+}
+
 fn open_mash_file(filename: &str, matches: &ArgMatches, default_sketch: Option<&JSONMultiSketch>) -> Result<JSONMultiSketch, String> {
     let final_sketch_size = matches.value_of("n_hashes").unwrap().parse::<usize>().map_err(|_| "n_hashes must be an integer")?;
     let seed = matches.value_of("seed").unwrap().parse::<u64>().map_err(|_| "seed must be an integer")?;
     let kmer_length = matches.value_of("kmer_length").unwrap().parse::<u8>().map_err(|_| "kmer_length must be an integer < 256")?;
+
     let no_strict = matches.is_present("no_strict");
-    let (sketch_size, filter) = match matches.value_of("filter") {
-        Some(raw_filter) => {
-            let filter = raw_filter.parse::<f32>().map_err(|_| format!("filter must be a number between 0 and {}", 100f32 / kmer_length as f32))?;
-            let oversketch = matches.value_of("oversketch").unwrap().parse::<usize>().map_err(|_| "bad value for oversketch")?;
-            (oversketch * final_sketch_size, kmer_length as f32 * filter / 100f32)
-        },
-        None => (final_sketch_size, 0f32),
+
+    let raw_abun_filter = matches.value_of("filter").unwrap().parse::<f32>().map_err(|_| format!("filter must be a percent between 0 and {}", 100f32 / kmer_length as f32))?;
+
+    let raw_strand_filter = matches.value_of("strand_filter").unwrap().parse::<f32>().map_err(|_| format!("strand-filter must be ratio between 0 and 1"))?;
+
+    // note: is_present returns true while occurrences_of correctly is 0
+    let mut filters = FilterParams {
+        abun_filter: kmer_length as f32 * raw_abun_filter / 100f32,
+        abun_filter_specified: matches.occurrences_of("filter") > 0,
+        strand_filter: raw_strand_filter,
+        strand_filter_specified: matches.occurrences_of("strand_filter") > 0,
     };
+
+    let oversketch = matches.value_of("oversketch").unwrap().parse::<usize>().map_err(|_| "bad value for oversketch")?;
+    let sketch_size = final_sketch_size * oversketch;
 
     // if the file isn't a sketch file, we try to sketch it and pass the sketches back
     if !filename.ends_with(FINCH_EXT) {
         return match default_sketch {
-            Some(s) => mash_files(vec![filename], sketch_size / final_sketch_size * s.sketchSize as usize, s.sketchSize as usize, s.kmer, filter, no_strict, s.hashSeed),
-            None => mash_files(vec![filename], sketch_size, final_sketch_size, kmer_length, filter, no_strict, seed),
+            Some(s) => mash_files(vec![filename], sketch_size / final_sketch_size * s.sketchSize as usize, s.sketchSize as usize, s.kmer, &mut filters, no_strict, s.hashSeed),
+            None => mash_files(vec![filename], sketch_size, final_sketch_size, kmer_length, &mut filters, no_strict, seed),
         };
     }
 
