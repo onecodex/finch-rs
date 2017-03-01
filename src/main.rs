@@ -24,7 +24,7 @@ mod minhashes;
 mod serialization;
 
 use distance::distance;
-use filtering::{filter_sketch, hist};
+use filtering::{filter_sketch, filter_strands, hist};
 use minhashes::MinHashKmers;
 use serialization::{JSONSketch, JSONMultiSketch};
 
@@ -82,14 +82,14 @@ macro_rules! add_kmer_options {
         .arg(Arg::with_name("filter")
              .short("f")
              .long("filter")
-             .help("Filter out kmers with an cumulative abundance lower than this")
+             .help("Filter out kmers with an cumulative abundance lower than this (error filtering)")
              .takes_value(true)
              .default_value("1.0"))
         .arg(Arg::with_name("strand_filter")
              .long("strand-filter")
-             .help("Filter out kmers with a forward/reverse ratio lower than this")
+             .help("Filter out kmers with a canonical kmer percentage lower than this (adapter filtering)")
              .takes_value(true)
-             .default_value("1.0"))
+             .default_value("0.1"))
         .arg(Arg::with_name("oversketch")
              .long("oversketch")
              .help("The amount of extra sketching to do before filtering. This is only a safety to allow sketching e.g. high-coverage files with lots of error-generated uniquemers and should not change the final sketch")
@@ -259,8 +259,12 @@ fn mash_files(filenames: Vec<&str>, n_hashes: usize, final_size: usize, kmer_len
         }, |seq| {
             let norm_seq = normalize(&seq.1, false);
             let mut norm_seq = Seq::new(&norm_seq);
-            for (kmer, _) in norm_seq.canonical_kmers(kmer_length) {
-                minhash.push(kmer);
+            for (kmer, is_rev_complement) in norm_seq.canonical_kmers(kmer_length) {
+                let rc_count = match is_rev_complement {
+                    true => 1u8,
+                    false => 0u8,
+                };
+                minhash.push(kmer, rc_count);
             }
             seq_len += seq.1.len() as u64;
         }).map_err(|e| e.to_string())?;
@@ -275,6 +279,7 @@ fn mash_files(filenames: Vec<&str>, n_hashes: usize, final_size: usize, kmer_len
         }
 
         if filters.strand_filter > 0f32 {
+            hashes = filter_strands(&hashes, filters.abun_filter);
             filter_stats.insert(String::from("strandFilter"), filters.strand_filter.to_string());
         }
         hashes.truncate(final_size);

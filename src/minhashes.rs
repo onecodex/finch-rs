@@ -73,12 +73,13 @@ pub struct KmerCount {
     pub hash: ItemHash,
     pub kmer: Vec<u8>,
     pub count: u16,
+    pub extra_count: u16,
 }
 
 
 pub struct MinHashKmers {
     hashes: BinaryHeap<HashedItem<Vec<u8>>>,
-    counts: HashMap<ItemHash, u16, BuildHasherDefault<NoHashHasher>>,
+    counts: HashMap<ItemHash, (u16, u16), BuildHasherDefault<NoHashHasher>>,
     size: usize,
     seed: u64,
     // heap_lock: Mutex<()>,
@@ -98,7 +99,7 @@ impl MinHashKmers {
         }
     }
 
-    pub fn push(&mut self, kmer: &[u8]) {
+    pub fn push(&mut self, kmer: &[u8], extra_count: u8) {
         let new_hash = hash_f(kmer, self.seed);
         let add_hash = match self.hashes.peek() {
             None => true,
@@ -107,20 +108,25 @@ impl MinHashKmers {
 
         if add_hash {
             if self.counts.contains_key(&new_hash) {
-                // let _ = self.map_lock.lock().unwrap();
-                let count = self.counts.entry(new_hash).or_insert(0u16);
-                *count += 1;
+                // let _lock = self.map_lock.lock().unwrap();
+                let count = self.counts.entry(new_hash).or_insert((0u16, 0u16));
+                (*count).0 += 1;
+                (*count).1 += extra_count as u16;
+                // drop(_lock);
             } else {
                 // let _ = self.heap_lock.lock().unwrap();
                 self.hashes.push(HashedItem {
                     hash: new_hash,
                     item: kmer.to_owned(),
                 });
-                self.counts.insert(new_hash, 1u16);
+                // let _map_lock = self.map_lock.lock().unwrap();
+                self.counts.insert(new_hash, (1u16, extra_count as u16));
                 if self.hashes.len() > self.size {
                     let hash = self.hashes.pop().unwrap();
                     self.counts.remove(&hash.hash);
                 }
+                // drop(_lock);
+                // drop(_map_lock);
             }
         }
     }
@@ -130,10 +136,12 @@ impl MinHashKmers {
 
         let mut results = Vec::with_capacity(vec.len());
         for item in vec.drain(..) {
+            let counts = *self.counts.get(&item.hash).unwrap();
             let new_item = KmerCount {
                 hash: item.hash,
                 kmer: item.item,
-                count: *self.counts.get(&item.hash).unwrap(),
+                count: counts.0,
+                extra_count: counts.1,
             };
             results.push(new_item);
         }
@@ -144,19 +152,22 @@ impl MinHashKmers {
 #[test]
 fn test_minhashkmers() {
     let mut queue = MinHashKmers::new(3, 42);
-    queue.push(b"ca");
-    queue.push(b"cc");
-    queue.push(b"ac");
-    queue.push(b"ac");
+    queue.push(b"ca", 0);
+    queue.push(b"cc", 1);
+    queue.push(b"ac", 0);
+    queue.push(b"ac", 1);
     let array = queue.into_vec();
     assert_eq!(array[0].kmer, vec![b'c', b'c']);
     assert_eq!(array[0].count, 1u16);
+    assert_eq!(array[0].extra_count, 1u16);
     assert!(array[0].hash < array[1].hash);
     assert_eq!(array[1].kmer, vec![b'c', b'a']);
     assert_eq!(array[1].count, 1u16);
+    assert_eq!(array[1].extra_count, 0u16);
     assert!(array[1].hash < array[2].hash);
     assert_eq!(array[2].kmer, vec![b'a', b'c']);
     assert_eq!(array[2].count, 2u16);
+    assert_eq!(array[2].extra_count, 1u16);
 }
 
 #[test]

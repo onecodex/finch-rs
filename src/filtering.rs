@@ -22,34 +22,29 @@ pub fn filter_sketch(sketch: &[KmerCount], filter_level: f32) -> (Vec<KmerCount>
         cutoff += 1;
     }
 
-    filter_abs(sketch, cutoff)
-}
-
-pub fn filter_abs(sketch: &[KmerCount], cov_cutoff: u16) -> (Vec<KmerCount>, u16) {
     let mut filtered = Vec::new();
     for kmer in sketch {
-        if kmer.count >= cov_cutoff {
+        if kmer.count >= cutoff {
             filtered.push(kmer.clone());
         }
     }
 
-    (filtered, cov_cutoff)
+    (filtered, cutoff)
 }
-
 
 #[test]
 fn test_filter_sketch() {
     let sketch = vec![
-        KmerCount {hash: 1, kmer: vec![], count: 1},
-        KmerCount {hash: 2, kmer: vec![], count: 1},
+        KmerCount {hash: 1, kmer: vec![], count: 1, extra_count: 0},
+        KmerCount {hash: 2, kmer: vec![], count: 1, extra_count: 0},
     ];
     let (filtered, cutoff) = filter_sketch(&sketch, 0.2);
     assert_eq!(filtered.len(), 2);
     assert_eq!(cutoff, 1);
 
     let sketch = vec![
-        KmerCount {hash: 1, kmer: vec![], count: 1},
-        KmerCount {hash: 2, kmer: vec![], count: 9},
+        KmerCount {hash: 1, kmer: vec![], count: 1, extra_count: 0},
+        KmerCount {hash: 2, kmer: vec![], count: 9, extra_count: 0},
     ];
     let (filtered, cutoff) = filter_sketch(&sketch, 0.2);
     assert_eq!(filtered.len(), 1);
@@ -57,16 +52,47 @@ fn test_filter_sketch() {
     assert_eq!(cutoff, 9);
 
     let sketch = vec![
-        KmerCount {hash: 1, kmer: vec![], count: 1},
-        KmerCount {hash: 2, kmer: vec![], count: 10},
-        KmerCount {hash: 3, kmer: vec![], count: 10},
-        KmerCount {hash: 4, kmer: vec![], count: 9},
+        KmerCount {hash: 1, kmer: vec![], count: 1, extra_count: 0},
+        KmerCount {hash: 2, kmer: vec![], count: 10, extra_count: 0},
+        KmerCount {hash: 3, kmer: vec![], count: 10, extra_count: 0},
+        KmerCount {hash: 4, kmer: vec![], count: 9, extra_count: 0},
     ];
     let (filtered, cutoff) = filter_sketch(&sketch, 0.1);
     assert_eq!(filtered.len(), 3);
     assert_eq!(filtered[0].hash, 2);
     assert_eq!(filtered[1].hash, 3);
     assert_eq!(cutoff, 9);
+}
+
+
+/// Filter out kmers that have a large abundance difference between being seen in the
+/// "forward" and "reverse" orientations (picked arbitrarily which is which).
+///
+/// These tend to be sequencing adapters.
+pub fn filter_strands(sketch: &[KmerCount], ratio_cutoff: f32) -> Vec<KmerCount> {
+    let mut filtered = Vec::new();
+    for kmer in sketch {
+        let lowest_strand_count: u16 = cmp::min(kmer.extra_count, kmer.count - kmer.extra_count);
+        if (lowest_strand_count as f32 / kmer.count as f32) >= ratio_cutoff {
+            filtered.push(kmer.clone());
+        }
+    }
+    filtered
+}
+
+
+#[test]
+fn test_filter_strands() {
+    let sketch = vec![
+        KmerCount {hash: 1, kmer: vec![], count: 10, extra_count: 1},
+        KmerCount {hash: 2, kmer: vec![], count: 10, extra_count: 2},
+        KmerCount {hash: 3, kmer: vec![], count: 10, extra_count: 8},
+        KmerCount {hash: 4, kmer: vec![], count: 10, extra_count: 9},
+    ];
+    let filtered = filter_strands(&sketch, 0.15);
+    assert_eq!(filtered.len(), 2);
+    assert_eq!(filtered[0].hash, 2);
+    assert_eq!(filtered[1].hash, 3);
 }
 
 
@@ -90,9 +116,9 @@ pub fn hist(sketch: &[KmerCount]) -> Vec<u64> {
 #[test]
 fn test_hist() {
     let sketch = vec![
-        KmerCount {hash: 1, kmer: vec![], count: 1},
-        KmerCount {hash: 2, kmer: vec![], count: 1},
-        KmerCount {hash: 3, kmer: vec![], count: 1},
+        KmerCount {hash: 1, kmer: vec![], count: 1, extra_count: 0},
+        KmerCount {hash: 2, kmer: vec![], count: 1, extra_count: 0},
+        KmerCount {hash: 3, kmer: vec![], count: 1, extra_count: 0},
     ];
 
     let hist_data = hist(&sketch);
@@ -100,10 +126,10 @@ fn test_hist() {
     assert_eq!(hist_data[0], 3);
 
     let sketch = vec![
-        KmerCount {hash: 1, kmer: vec![], count: 4},
-        KmerCount {hash: 2, kmer: vec![], count: 2},
-        KmerCount {hash: 3, kmer: vec![], count: 4},
-        KmerCount {hash: 4, kmer: vec![], count: 3},
+        KmerCount {hash: 1, kmer: vec![], count: 4, extra_count: 0},
+        KmerCount {hash: 2, kmer: vec![], count: 2, extra_count: 0},
+        KmerCount {hash: 3, kmer: vec![], count: 4, extra_count: 0},
+        KmerCount {hash: 4, kmer: vec![], count: 3, extra_count: 0},
     ];
 
     let hist_data = hist(&sketch);

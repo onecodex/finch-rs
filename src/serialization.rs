@@ -88,6 +88,7 @@ impl JSONSketch {
                 hash: hash,
                 kmer: kmer,
                 count: count,
+                extra_count: 0,
             });
         }
         Some(kmercount_list)
@@ -129,6 +130,7 @@ impl BinarySketch {
                 hash: hash_f(&kmer, 42),
                 kmer: kmer,
                 count: (*self.counts)[i as usize],
+                extra_count: 0,
             });
         }
         Some(kmercounts)
