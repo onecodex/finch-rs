@@ -39,7 +39,7 @@ TODO: explain query/pairwise options
 If the files listed are FAST(A/Q) instead of sketches, Finch will automatically sketch them into memory using the same command-line parameters as in `sketch` or, for files after the first, the parameters used to sketch the first file.
 
 Due to different counting algoritms and stopping criteria, distances may be slightly different from the original Mash's.
-If you'd like identical distances, the `--mash-mode` flag will use the original counting algorithm.
+If you'd like identical distances, the `--mash` flag will use the original counting algorithm.
 
 ### `finch hist` ###
 

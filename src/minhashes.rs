@@ -80,6 +80,7 @@ pub struct KmerCount {
 pub struct MinHashKmers {
     hashes: BinaryHeap<HashedItem<Vec<u8>>>,
     counts: HashMap<ItemHash, (u16, u16), BuildHasherDefault<NoHashHasher>>,
+    total_count: u64,
     size: usize,
     seed: u64,
     // heap_lock: Mutex<()>,
@@ -92,6 +93,7 @@ impl MinHashKmers {
         MinHashKmers {
             hashes: BinaryHeap::with_capacity(size + 1),
             counts: HashMap::with_capacity_and_hasher(size, BuildHasherDefault::default()),
+            total_count: 0,
             size: size,
             seed: seed,
             // heap_lock: Mutex::new(()),
@@ -107,6 +109,7 @@ impl MinHashKmers {
         };
 
         if add_hash {
+            self.total_count += 1;
             if self.counts.contains_key(&new_hash) {
                 // let _lock = self.map_lock.lock().unwrap();
                 let count = self.counts.entry(new_hash).or_insert((0u16, 0u16));
@@ -123,7 +126,9 @@ impl MinHashKmers {
                 self.counts.insert(new_hash, (1u16, extra_count as u16));
                 if self.hashes.len() > self.size {
                     let hash = self.hashes.pop().unwrap();
-                    self.counts.remove(&hash.hash);
+                    let old_count = self.counts.remove(&hash.hash).unwrap().0;
+                    // TODO: check if old_count / total_count > ...?
+                    self.total_count -= old_count as u64;
                 }
                 // drop(_lock);
                 // drop(_map_lock);

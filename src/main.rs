@@ -126,6 +126,8 @@ fn main() {
              .conflicts_with("queries")
              .help("Calculate distances between all sketches"))
         .arg(Arg::with_name("queries")
+             .short("q")
+             .long("queries")
              .help("All distances are from these sketches")
              .multiple(true)
              .conflicts_with("pairwise")
