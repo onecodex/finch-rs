@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use needletail::bitkmer::{str_to_bitmer, bitmer_to_str};
+use needletail::bitkmer::{bytes_to_bitmer, bitmer_to_bytes};
 
 use minhashes::{KmerCount, hash_f};
 
@@ -109,7 +109,7 @@ impl BinarySketch {
         let mut kmer_list = Vec::with_capacity(kmercounts.len());
         let mut count_list = Vec::with_capacity(kmercounts.len());
         for hash in &kmercounts {
-            kmer_list.push(str_to_bitmer(&hash.kmer).0 as u64);
+            kmer_list.push(bytes_to_bitmer(&hash.kmer).0 as u64);
             count_list.push(hash.count);
         }
         BinarySketch {
@@ -124,7 +124,7 @@ impl BinarySketch {
         let mut kmercounts = Vec::with_capacity(self.len as usize);
         for i in 0..self.len {
             let bitmer = (*self.kmers)[i as usize];
-            let kmer = bitmer_to_str((bitmer, self.kmer_size));
+            let kmer = bitmer_to_bytes((bitmer, self.kmer_size));
             kmercounts.push(KmerCount {
                 // there's an assumption here that the seed is 42
                 hash: hash_f(&kmer, 42),

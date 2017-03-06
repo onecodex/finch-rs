@@ -15,8 +15,6 @@ extern crate serde_json;
 
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use needletail::fastx::fastx_cli;
-use needletail::seq::Seq;
-use needletail::kmer::normalize;
 
 mod distance;
 mod filtering;
@@ -259,16 +257,14 @@ fn mash_files(filenames: Vec<&str>, n_hashes: usize, final_size: usize, kmer_len
                 }
             }
         }, |seq| {
-            let norm_seq = normalize(&seq.1, false);
-            let mut norm_seq = Seq::new(&norm_seq);
-            for (kmer, is_rev_complement) in norm_seq.canonical_kmers(kmer_length) {
+            seq_len += seq.seq.len() as u64;
+            for (_, kmer, is_rev_complement) in seq.normalize(false).kmers(kmer_length, true) {
                 let rc_count = match is_rev_complement {
                     true => 1u8,
                     false => 0u8,
                 };
                 minhash.push(kmer, rc_count);
             }
-            seq_len += seq.1.len() as u64;
         }).map_err(|e| e.to_string())?;
 
         let mut hashes = minhash.into_vec();
