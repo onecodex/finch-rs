@@ -1,9 +1,8 @@
 #[macro_use]
 extern crate serde_derive;
 
-use std::collections::{HashMap, HashSet};
-use std::fmt::Display;
 use std::fs::File;
+use std::collections::{HashMap, HashSet};
 use std::io::{Write, Read};
 use std::path::Path;
 
@@ -13,7 +12,7 @@ extern crate needletail;
 extern crate serde;
 extern crate serde_json;
 
-use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
+use clap::{App, AppSettings, Arg, ArgGroup, ArgMatches, SubCommand};
 use needletail::fastx::fastx_cli;
 
 mod distance;
@@ -22,7 +21,7 @@ mod minhashes;
 mod serialization;
 
 use distance::distance;
-use filtering::{filter_sketch, filter_strands, hist};
+use filtering::{FilterParams, filter_sketch, hist};
 use minhashes::MinHashKmers;
 use serialization::{JSONSketch, JSONMultiSketch};
 
@@ -34,7 +33,6 @@ macro_rules! add_output_options {
              .short("o")
              .long("output")
              .help("Output to this file")
-             .conflicts_with("std_out")
              .takes_value(true))
         .arg(Arg::with_name("std_out")
              .short("O")
@@ -77,21 +75,35 @@ macro_rules! add_kmer_options {
              .help("Length of kmers to use")
              .takes_value(true)
              .default_value("21"))
+        .arg(Arg::with_name("no_filter")
+             .long("no-filter")
+             .conflicts_with("filter")
+             .help("Disable filtering (default for FASTA)"))
         .arg(Arg::with_name("filter")
              .short("f")
              .long("filter")
-             .help("Filter out kmers with an cumulative abundance lower than this (error filtering)")
-             .takes_value(true)
-             .default_value("1.0"))
+             .help("Enable filtering (default for FASTQ)"))
+        .arg(Arg::with_name("min_abun_filter")
+             .long("min-abun-filter")
+             .help("Kmers must have at least this coverage to be included")
+             .takes_value(true))
+        .arg(Arg::with_name("max_abun_filter")
+             .long("max-abun-filter")
+             .help("Kmers must have a coverage under this to be included")
+             .takes_value(true))
         .arg(Arg::with_name("strand_filter")
              .long("strand-filter")
              .help("Filter out kmers with a canonical kmer percentage lower than this (adapter filtering)")
              .takes_value(true)
              .default_value("0.1"))
+        .arg(Arg::with_name("err_filter")
+             .long("err-filter")
+             .help("Dynamically determine a minimum coverage threshold for filtering from the kmer count histogram using an assumed error rate percentage")
+             .takes_value(true)
+             .default_value("1"))
         .arg(Arg::with_name("oversketch")
              .long("oversketch")
              .help("The amount of extra sketching to do before filtering. This is only a safety to allow sketching e.g. high-coverage files with lots of error-generated uniquemers and should not change the final sketch")
-             .requires("filter")
              .takes_value(true)
              .default_value("100"))
         .arg(Arg::with_name("no_strict")
@@ -154,7 +166,7 @@ fn main() {
     add_kmer_options!(info_command);
 
     let matches = App::new("finch").version("0.1.0")
-        .author("Roderick Bovee <roderick@onecodex.com>")
+        .author("Roderick Bovee & One Codex <roderick@onecodex.com>")
         .about("Work with MASH sketches")
         .setting(AppSettings::VersionlessSubcommands)
         .subcommand(sketch_command)
@@ -236,11 +248,20 @@ fn main() {
             hist_map.insert(&sketch.name, hist(&sketch.get_kmers().unwrap()));
         }
         output_to!(hist_map, matches);
+    } else if let Some(matches) = matches.subcommand_matches("info") {
+        let filenames: Vec<_> = matches.values_of("INPUT").unwrap().collect();
+
+        let all_sketch_objs = open_mash_files(filenames, matches).unwrap();
+        let all_sketches = all_sketch_objs.sketches;
+
+        for sketch in all_sketches.iter() {
+            // println!("{} (length {}) - {}", &sketch.name, &sketch.seqLength, &sketch.comment);
+        }
     }
 }
 
 
-fn mash_files(filenames: Vec<&str>, n_hashes: usize, final_size: usize, kmer_length: u8, filters: &mut FilterParams, no_strict: bool, seed: u64) -> Result<JSONMultiSketch, String> {
+pub fn mash_files(filenames: Vec<&str>, n_hashes: usize, final_size: usize, kmer_length: u8, filters: &mut FilterParams, no_strict: bool, seed: u64) -> Result<JSONMultiSketch, String> {
     let mut sketches = Vec::with_capacity(filenames.len());
     for filename in &filenames {
         let mut minhash = MinHashKmers::new(n_hashes, seed);
@@ -248,13 +269,12 @@ fn mash_files(filenames: Vec<&str>, n_hashes: usize, final_size: usize, kmer_len
         let path = Path::new(filename);
         fastx_cli(path.to_str().ok_or("Couldn't make path into string")?, |seq_type| {
             // disable filtering for FASTA files unless it was explicitly specified
-            if seq_type == "FASTA" {
-                if !filters.abun_filter_specified {
-                    filters.abun_filter = 0f32;
-                }
-                if !filters.strand_filter_specified {
-                    filters.strand_filter = 0f32;
-                }
+            if let None = filters.filter_on {
+                filters.filter_on = match seq_type {
+                    "FASTA" => Some(false),
+                    "FASTQ" => Some(true),
+                    _ => panic!("Unknown sequence type"),
+                };
             }
         }, |seq| {
             seq_len += seq.seq.len() as u64;
@@ -267,24 +287,13 @@ fn mash_files(filenames: Vec<&str>, n_hashes: usize, final_size: usize, kmer_len
             }
         }).map_err(|e| e.to_string())?;
 
-        let mut hashes = minhash.into_vec();
-        let mut filter_stats: HashMap<String, String> = HashMap::new();
-        if filters.abun_filter > 0f32 {
-            let (filtered_hashes, cutoff) = filter_sketch(&hashes, filters.abun_filter);
-            hashes = filtered_hashes;
-            filter_stats.insert(String::from("abunFilter"), filters.abun_filter.to_string());
-            filter_stats.insert(String::from("minCopies"), cutoff.to_string());
-        }
-
-        if filters.strand_filter > 0f32 {
-            hashes = filter_strands(&hashes, filters.abun_filter);
-            filter_stats.insert(String::from("strandFilter"), filters.strand_filter.to_string());
-        }
-        hashes.truncate(final_size);
+        let hashes = minhash.into_vec();
+        let (mut filtered_hashes, filter_stats) = filter_sketch(&hashes, &filters);
+        filtered_hashes.truncate(final_size);
 
         // directory should be clipped from filename
         let basename = path.file_name().ok_or("Couldn't get filename from path")?;
-        let sketch = JSONSketch::new(basename.to_str().ok_or("Couldn't make filename into string")?, seq_len, hashes, &filter_stats);
+        let sketch = JSONSketch::new(basename.to_str().ok_or("Couldn't make filename into string")?, seq_len, filtered_hashes, &filter_stats);
 
         if !no_strict && sketch.len() < final_size {
             return Err(format!("{} had too few kmers ({}) to sketch", filename, sketch.len()));
@@ -304,7 +313,6 @@ fn mash_files(filenames: Vec<&str>, n_hashes: usize, final_size: usize, kmer_len
     })
 }
 
-
 fn open_mash_files(filenames: Vec<&str>, matches: &ArgMatches) -> Result<JSONMultiSketch, String> {
     let mut filename_iter = filenames.iter();
     let filename = filename_iter.next().ok_or("At least one filename must be specified")?;
@@ -317,30 +325,53 @@ fn open_mash_files(filenames: Vec<&str>, matches: &ArgMatches) -> Result<JSONMul
     Ok(all_sketch_objs)
 }
 
-struct FilterParams {
-    abun_filter: f32,
-    abun_filter_specified: bool,
-    strand_filter: f32,
-    strand_filter_specified: bool,
-}
-
 fn open_mash_file(filename: &str, matches: &ArgMatches, default_sketch: Option<&JSONMultiSketch>) -> Result<JSONMultiSketch, String> {
     let final_sketch_size = matches.value_of("n_hashes").unwrap().parse::<usize>().map_err(|_| "n_hashes must be an integer")?;
     let seed = matches.value_of("seed").unwrap().parse::<u64>().map_err(|_| "seed must be an integer")?;
     let kmer_length = matches.value_of("kmer_length").unwrap().parse::<u8>().map_err(|_| "kmer_length must be an integer < 256")?;
 
     let no_strict = matches.is_present("no_strict");
-
-    let raw_abun_filter = matches.value_of("filter").unwrap().parse::<f32>().map_err(|_| format!("filter must be a percent between 0 and {}", 100f32 / kmer_length as f32))?;
-
-    let raw_strand_filter = matches.value_of("strand_filter").unwrap().parse::<f32>().map_err(|_| format!("strand-filter must be ratio between 0 and 1"))?;
+    let filter_on = match (matches.is_present("filter"), matches.is_present("no_filter")) {
+        (true, true) => panic!("Can't have both filtering and no filtering!"),
+        (true, false) => Some(true),
+        (false, true) => Some(false),
+        (false, false) => None,
+    };
+    let min_abun_filter = match matches.occurrences_of("min_abun_filter") > 0 {
+        true => Some(matches.value_of("min_abun_filter").unwrap().parse::<u16>().map_err(|_| {
+            format!("min_abun_filter must be a number greater than or equal to 0")
+        })?),
+        false => None,
+    };
+    let max_abun_filter = match matches.occurrences_of("max_abun_filter") > 0 {
+        true => Some(matches.value_of("max_abun_filter").unwrap().parse::<u16>().map_err(|_| {
+            format!("max_abun_filter must be a number greater than or equal to 0")
+        })?),
+        false => None,
+    };
+    let err_filter = matches.value_of("err_filter").unwrap().parse::<f32>().map_err(|_| {
+        format!("err-filter must be a number")
+    }).and_then(|r| {
+        if 0f32 <= r && r <= 100f32 / kmer_length as f32 {
+            return Ok(kmer_length as f32 * r / 100f32);
+        }
+        Err(format!("err-filter must be a percent between 0 and {}", 100f32 / kmer_length as f32))
+    })?;
+    let strand_filter = matches.value_of("strand_filter").unwrap().parse::<f32>().map_err(|_| {
+        format!("strand-filter must be a number")
+    }).and_then(|r| {
+        if 0f32 <= r && r <= 1f32 {
+            return Ok(r);
+        }
+        Err(format!("strand-filter must be a ratio between 0 and 1"))
+    })?;
 
     // note: is_present returns true while occurrences_of correctly is 0
     let mut filters = FilterParams {
-        abun_filter: kmer_length as f32 * raw_abun_filter / 100f32,
-        abun_filter_specified: matches.occurrences_of("filter") > 0,
-        strand_filter: raw_strand_filter,
-        strand_filter_specified: matches.occurrences_of("strand_filter") > 0,
+        filter_on: filter_on,
+        abun_filter: (min_abun_filter, max_abun_filter),
+        err_filter: err_filter,
+        strand_filter: strand_filter,
     };
 
     let oversketch = matches.value_of("oversketch").unwrap().parse::<usize>().map_err(|_| "bad value for oversketch")?;

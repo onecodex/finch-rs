@@ -3,14 +3,15 @@ use needletail::bitkmer::{bytes_to_bitmer, bitmer_to_bytes};
 
 use minhashes::{KmerCount, hash_f};
 
+
 #[allow(non_snake_case)]
 #[derive(Serialize, Deserialize)]
 pub struct SketchDistance {
     pub containment: f64,
     pub jaccard: f64,
     pub mashDistance: f64,
-    pub common_hashes: u64,
-    pub total_hashes: u64,
+    pub commonHashes: u64,
+    pub totalHashes: u64,
     pub query: String,
     pub reference: String,
 }
@@ -33,9 +34,9 @@ pub struct JSONMultiSketch {
 #[derive(Deserialize, Eq, PartialEq, Clone, Serialize)]
 pub struct JSONSketch {
     pub name: String,
-    seqLength: Option<u64>,
-    comment: Option<String>,
-    filters: Option<HashMap<String, String>>,
+    pub seqLength: Option<u64>,
+    pub comment: Option<String>,
+    pub filters: Option<HashMap<String, String>>,
     hashes: Vec<String>,
     kmers: Option<Vec<String>>,
     counts: Option<Vec<u16>>,
