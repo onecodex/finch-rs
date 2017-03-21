@@ -10,3 +10,4 @@ pub mod minhashes;
 pub mod filtering;
 pub mod distance;
 pub mod serialization;
+pub mod statistics;

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use needletail::bitkmer::{bytes_to_bitmer, bitmer_to_bytes};
 
+use filtering::{FilterParams, filter_sketch};
 use minhashes::{KmerCount, hash_f};
 
 
@@ -89,10 +90,32 @@ impl JSONSketch {
                 hash: hash,
                 kmer: kmer,
                 count: count,
-                extra_count: 0,
+                extra_count: count / 2,
             });
         }
         Some(kmercount_list)
+    }
+
+    pub fn apply_filtering(&mut self, filters: &FilterParams) -> bool {
+        let hashes: Vec<KmerCount>;
+        match self.get_kmers() {
+            Some(h) => hashes = h,
+            None => return false,
+        };
+        let (filtered_hashes, filter_stats) = filter_sketch(&hashes, &filters);
+        let mut hash_list = Vec::with_capacity(filtered_hashes.len());
+        let mut kmer_list = Vec::with_capacity(filtered_hashes.len());
+        let mut count_list = Vec::with_capacity(filtered_hashes.len());
+        for hash in &filtered_hashes {
+            hash_list.push(hash.hash.to_string());
+            kmer_list.push(String::from_utf8(hash.kmer.clone()).unwrap());
+            count_list.push(hash.count);
+        }
+        self.hashes = hash_list;
+        self.kmers = Some(kmer_list);
+        self.counts = Some(count_list);
+        self.filters = Some(filter_stats);
+        true
     }
 }
 

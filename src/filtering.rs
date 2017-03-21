@@ -2,6 +2,7 @@ use std::cmp;
 use std::collections::HashMap;
 
 use minhashes::KmerCount;
+use statistics::hist;
 
 
 /// Used to pass around filter options for sketching
@@ -57,7 +58,7 @@ pub fn guess_filter_threshold(sketch: &[KmerCount], filter_level: f32) -> u16 {
     let cutoff_amt = filter_level * total_counts;
 
     // calculate the coverage that N% of the weighted data is above
-    let mut wgt_cutoff: u16 = 1;
+    let mut wgt_cutoff: usize = 1;
     let mut cum_count: u64 = 0;
     for count in &hist_data {
         cum_count += wgt_cutoff as u64 * *count as u64;
@@ -67,26 +68,39 @@ pub fn guess_filter_threshold(sketch: &[KmerCount], filter_level: f32) -> u16 {
         wgt_cutoff += 1;
     }
 
-    // now find the first local minima
-    // (using what's essentially a 2 point moving window to smooth the data)
-    let mut fm_cutoff: u16 = 0;
-    let mut prev_count_1 = hist_data[0];
-    let mut prev_count_2 = hist_data[0];
-    for count in &hist_data {
-        if *count > prev_count_1 && *count > prev_count_2 {
-            break;
-        }
-        prev_count_2 = prev_count_1;
-        prev_count_1 = *count;
-        fm_cutoff += 1;
+    if wgt_cutoff <= 2 {
+        return wgt_cutoff as u16;
     }
 
-    // we return the minimum of these two coverages
-    cmp::min(fm_cutoff, wgt_cutoff)
+    // now find the right-most global maxima
+    let win_size = cmp::max(1, wgt_cutoff / 20);
+    let mut sum: u64 = hist_data[..win_size].iter().sum();
+    let mut lowest_val = sum;
+    let mut lowest_idx = win_size;
+    for (i, j) in (0..wgt_cutoff - win_size).zip(win_size..wgt_cutoff) {
+        if sum <= lowest_val {
+            lowest_val = sum;
+            lowest_idx = j;
+        }
+        sum -= hist_data[i];
+        sum += hist_data[j];
+    }
+
+    lowest_idx as u16
 }
 
 #[test]
 fn test_guess_filter_threshold() {
+    let sketch = vec![];
+    let cutoff = guess_filter_threshold(&sketch, 0.2);
+    assert_eq!(cutoff, 1);
+
+    let sketch = vec![
+        KmerCount {hash: 1, kmer: vec![], count: 1, extra_count: 0},
+    ];
+    let cutoff = guess_filter_threshold(&sketch, 0.2);
+    assert_eq!(cutoff, 1);
+
     let sketch = vec![
         KmerCount {hash: 1, kmer: vec![], count: 1, extra_count: 0},
         KmerCount {hash: 2, kmer: vec![], count: 1, extra_count: 0},
@@ -211,49 +225,4 @@ fn test_filter_strands() {
     assert_eq!(filtered.len(), 2);
     assert_eq!(filtered[0].hash, 3);
     assert_eq!(filtered[1].hash, 4);
-}
-
-
-/// Generates a Vec of numbers of kmers for each coverage level
-///
-/// For example, a size 1000 sketch of the same genome repeated 5 times (e.g. 5x coverage) should
-/// produce a "histogram" like [0, 0, 0, 0, 1000] (assuming no repetative kmers in the genome)
-///
-pub fn hist(sketch: &[KmerCount]) -> Vec<u64> {
-    let mut counts = vec![0u64; 65536];
-    let mut max_count: u16 = 0;
-    for kmer in sketch {
-        max_count = cmp::max(max_count, kmer.count);
-        counts[kmer.count as usize - 1] += 1;
-    }
-    counts.truncate(max_count as usize);
-    counts
-}
-
-
-#[test]
-fn test_hist() {
-    let sketch = vec![
-        KmerCount {hash: 1, kmer: vec![], count: 1, extra_count: 0},
-        KmerCount {hash: 2, kmer: vec![], count: 1, extra_count: 0},
-        KmerCount {hash: 3, kmer: vec![], count: 1, extra_count: 0},
-    ];
-
-    let hist_data = hist(&sketch);
-    assert_eq!(hist_data.len(), 1);
-    assert_eq!(hist_data[0], 3);
-
-    let sketch = vec![
-        KmerCount {hash: 1, kmer: vec![], count: 4, extra_count: 0},
-        KmerCount {hash: 2, kmer: vec![], count: 2, extra_count: 0},
-        KmerCount {hash: 3, kmer: vec![], count: 4, extra_count: 0},
-        KmerCount {hash: 4, kmer: vec![], count: 3, extra_count: 0},
-    ];
-
-    let hist_data = hist(&sketch);
-    assert_eq!(hist_data.len(), 4);
-    assert_eq!(hist_data[0], 0);
-    assert_eq!(hist_data[1], 1);
-    assert_eq!(hist_data[2], 1);
-    assert_eq!(hist_data[3], 2);
 }

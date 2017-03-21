@@ -3,7 +3,7 @@ extern crate serde_derive;
 
 use std::fs::File;
 use std::collections::{HashMap, HashSet};
-use std::io::{Write, Read};
+use std::io::Write;
 use std::path::Path;
 
 extern crate clap;
@@ -12,18 +12,20 @@ extern crate needletail;
 extern crate serde;
 extern crate serde_json;
 
-use clap::{App, AppSettings, Arg, ArgGroup, ArgMatches, SubCommand};
+use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use needletail::fastx::fastx_cli;
 
 mod distance;
 mod filtering;
 mod minhashes;
 mod serialization;
+mod statistics;
 
 use distance::distance;
-use filtering::{FilterParams, filter_sketch, hist};
+use filtering::{FilterParams, filter_sketch};
 use minhashes::MinHashKmers;
 use serialization::{JSONSketch, JSONMultiSketch};
+use statistics::{hist, cardinality};
 
 const FINCH_EXT: &'static str = ".sk";
 
@@ -255,7 +257,35 @@ fn main() {
         let all_sketches = all_sketch_objs.sketches;
 
         for sketch in all_sketches.iter() {
-            // println!("{} (length {}) - {}", &sketch.name, &sketch.seqLength, &sketch.comment);
+            print!("{}", &sketch.name);
+            if let Some(l) = sketch.seqLength {
+                println!(" (from {}bp)", l);
+            } else {
+                println!("");
+            }
+            if let Some(kmers) = sketch.get_kmers() {
+                if let Ok(c) = cardinality(&kmers) {
+                    println!("  Estimated # of Unique Kmers: {}", c);
+                }
+
+                let histogram = hist(&kmers);
+                let mean = histogram.iter().enumerate()
+                    .map(|(i, v)| (i as f32 * *v as f32, *v as f32))
+                    .fold((0f32, 0f32), |e, s| (e.0 + s.0, e.1 + s.1));
+                println!("  Estimated Average Depth: {}x", mean.0 / mean.1);
+
+                let mut total_gc: u64 = 0;
+                for kmer in &kmers {
+                    total_gc += kmer.kmer.iter().map(|b| {
+                        match *b {
+                            b'G' | b'g' | b'C' | b'c' => kmer.count as u64,
+                            _ => 0,
+                        }
+                    }).sum();
+                }
+                let total_bases = mean.0 * kmers[0].kmer.len() as f32;
+                println!("  Estimated % GC: {}%", 100f32 * total_gc as f32 / total_bases);
+            }
         }
     }
 }
@@ -290,14 +320,13 @@ pub fn mash_files(filenames: Vec<&str>, n_hashes: usize, final_size: usize, kmer
         let hashes = minhash.into_vec();
         let (mut filtered_hashes, filter_stats) = filter_sketch(&hashes, &filters);
         filtered_hashes.truncate(final_size);
+        if !no_strict && filtered_hashes.len() < final_size {
+            return Err(format!("{} had too few kmers ({}) to sketch", filename, filtered_hashes.len()));
+        }
 
         // directory should be clipped from filename
         let basename = path.file_name().ok_or("Couldn't get filename from path")?;
         let sketch = JSONSketch::new(basename.to_str().ok_or("Couldn't make filename into string")?, seq_len, filtered_hashes, &filter_stats);
-
-        if !no_strict && sketch.len() < final_size {
-            return Err(format!("{} had too few kmers ({}) to sketch", filename, sketch.len()));
-        }
         sketches.push(sketch);
     }
     Ok(JSONMultiSketch {
@@ -389,9 +418,16 @@ fn open_mash_file(filename: &str, matches: &ArgMatches, default_sketch: Option<&
     let file = File::open(filename).map_err(|_|
         format!("Error opening {}", &filename)
     )?;
-    let json: JSONMultiSketch = serde_json::from_reader(file).map_err(|_|
+    let mut json: JSONMultiSketch = serde_json::from_reader(file).map_err(|_|
         format!("Error parsing {}", &filename)
     )?;
+
+    // if filtering is explicitly set, re-filter the hashes
+    if filters.filter_on == Some(true) {
+        for sketch in &mut json.sketches {
+            sketch.apply_filtering(&filters);
+        }
+    }
 
     // sanity checking to make sure different files have comparable hashing parameters
     if let Some(s) = default_sketch {
