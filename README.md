@@ -1,6 +1,8 @@
-# finch #
+# Finch #
 
-# Overview #
+[![CircleCI](https://circleci.com/gh/onecodex/finch-rs.svg?style=shield&circle-token=4fa4296a595f0d0e8dfcea750d76c39576f2df73)](https://circleci.com/gh/onecodex/finch-rs)
+
+## Overview ##
 
 Finch is an implementation of min-wise independent permutation locality sensitive hashing ("MinHashing") for application in genomic data ("Mashing").
 This is a rewrite of One Codex's existing internal clustering/sequence search tool in Rust with a new command-line interface.
@@ -28,14 +30,11 @@ In comparison, Mash has a 1.2 Mb memory footprint and sourmash has a 13.9 Mb mem
 While the oversketching approach uses more memory, it's still well within the capabilities of an average laptop or server.
 
 
-TODO: submit to JOSS (need my orchid ID)
-   TODO: run script to generate JOSS metadata - https://gist.github.com/arfon/478b2ed49e11f984d6fb
-
-# Usage #
+## Usage ##
 
 Finch supports four primary operations, but many of these operations take similar parameters.
 
-## Shared Parameters ##
+### Shared Parameters ###
 
 Finch can take many parameters to control how sketching is performed (and these options are also available for the `dist`, `hist`, and `info` commands).
  - `-n <N>` / `--n-hashes <N>` controls the overall size of the sketch (higher values give better resolution in comparisons).
@@ -54,7 +53,7 @@ There are two options that may help:
  - `--no-strict` will allow finch to proceed with a sketch smaller than the specified size. Use with caution.
 
 
-## `finch sketch` ##
+### `finch sketch` ###
 
 `finch sketch` will read through a FASTA or FASTQ file and generate a "sketch" that can be used for further .
 
@@ -68,7 +67,7 @@ To read from standard input, use a filename of `-`; this allows streaming of fil
 
 Sketches should be compatible with the original Mash if you edit their `src/mash/hash.h` and set the hash value to `0` or if you manually override finch's seed value by setting `--seed 42`.
 
-## `finch dist` ##
+### `finch dist` ###
 
 `finch dist` will calculate Jaccard distances between different sketches.
 If the files listed are FAST(A/Q) instead of sketches, Finch will automatically sketch them into memory using the same command-line parameters as in `sketch` or, for files after the first, the parameters used to sketch the first file.
@@ -80,18 +79,18 @@ Additionally, passing the `--pairwise` option will calculate the distances betwe
 Due to different counting algoritms and stopping criteria, distances may be slightly different from the calculation in the original Mash program.
 If you'd like comparable (i.e. identical) distances, the `--mash` flag will use their original counting and distance algorithm.
 
-## `finch hist` ##
+### `finch hist` ###
 
 `finch hist` will output a histogram in JSON format for each sketch provided.
 The histogram is a list of the number of hashes at each depth, e.g. `{"sketch_name": [1, 0, 1]}` for a sketch with two hashes at depths 1 and 3 respectively.
 
-## `finch info` ##
+### `finch info` ###
 
 `finch info` will output a formatted list of % GC, coverage, etc for each sketch provided.
 The values returned from this are approximate and the algoritms used to calculate are still very rough and liable to change.
 
 
-# References #
+## References ##
 
 There are several other implementations of the Mash algorithm which should be compatible/comparable with this one, notably:
  - [Mash](https://github.com/marbl/Mash) - First implementation and theoretical paper
