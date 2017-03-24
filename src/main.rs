@@ -107,7 +107,7 @@ macro_rules! add_kmer_options {
              .long("oversketch")
              .help("The amount of extra sketching to do before filtering. This is only a safety to allow sketching e.g. high-coverage files with lots of error-generated uniquemers and should not change the final sketch")
              .takes_value(true)
-             .default_value("100"))
+             .default_value("200"))
         .arg(Arg::with_name("no_strict")
              .short("N")
              .long("no-strict")
@@ -152,6 +152,7 @@ fn main() {
     add_kmer_options!(dist_command);
 
     let mut hist_command = SubCommand::with_name("hist")
+        .about("Display histograms of kmer abundances")
         .arg(Arg::with_name("INPUT")
              .help("Generate histograms from these file(s)")
              .multiple(true)
@@ -160,6 +161,7 @@ fn main() {
     add_kmer_options!(hist_command);
 
     let mut info_command = SubCommand::with_name("info")
+        .about("Display basic statistics")
         .arg(Arg::with_name("INPUT")
              .help("Return stats on these file(s)")
              .multiple(true)

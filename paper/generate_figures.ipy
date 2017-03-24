@@ -1,0 +1,87 @@
+"""
+The Ipython code used to generate various comparison figures
+
+Probably won't actually run, but using this for documentation for myself down the road
+"""
+# E. coli raw/assembled files: SRR5282566.fasta -> GCF_001276585.2_ASM127658v2_genomic.fna.gz
+# S. pneumoniae raw/assembled files: SRR5132341.fasta -> GCF_001909705.1_ASM190970v1_genomic.fna.gz
+from __future__ import print_function, division
+import json
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.ticker import FuncFormatter
+
+!./target/release/finch sketch -n 10000 ~/Downloads/GCF_001276585.2_ASM127658v2_genomic.fna.gz -o assembly_ec.sk
+!./target/release/finch sketch -n 10000 ~/Downloads/GCF_001909705.1_ASM190970v1_genomic.fna.gz -o assembly_sp.sk
+
+containments_auto = [0.6976, 0.9137, 0.9833, 0.9953, 0.9976, 0.9982, 0.9988, 0.9987, 0.9991, 0.999]
+containments_no_filter = [0.6976, 0.5647, 0.3991, 0.3469, 0.2134, 0.1212, 0.0678, 0.0345, 0.02, 0.0106]
+containments_one_filter = [0.6162, 0.9137, 0.9833, 0.978, 0.9448, 0.8693, 0.7131, 0.4396, 0.2179, 0.0838]
+
+depths = [2, 4, 8, 10, 20, 40, 80, 160, 320, 640]
+containments_auto = []
+containments_no_filter = []
+containments_one_filter = []
+for n in depths:  # max cov 785
+    print(n)
+    out = !cat ~/Downloads/SRR5282566.fasta | head -n {n * 62745} | ./target/release/finch dist -n 10000 -f - assembly_ec.sk
+    containments_auto.append(json.loads(out[0])[0]['containment'])
+
+    out = !cat ~/Downloads/SRR5282566.fasta | head -n {n * 62745} | ./target/release/finch dist -n 10000 --no-filter - assembly_ec.sk
+    containments_no_filter.append(json.loads(out[0])[0]['containment'])
+
+    !cat ~/Downloads/SRR5282566.fasta | head -n {n * 62745} | ./target/release/finch sketch -n 10000 -f --min-abun-filter 2 - -o temp.sk
+    out = !./target/release/finch dist temp.sk assembly_ec.sk
+    containments_one_filter.append(json.loads(out[0])[0]['containment'])
+
+# !./mash sketch -s 10000 ~/Downloads/GCF_001276585.2_ASM127658v2_genomic.fna.gz -o ./assembly_ec
+# for n in [10, 20, 40, 80]:
+#     !./mash sketch -s 10000 -c {n} -r -m 2 /Users/roderickbovee/Downloads/SRR5282566.fasta -o cov_{n}
+# plt.plot([10, 15, 20, 25, 40, 80], [0.9806, 0.9664, 0.95, 0.9309, 0.8604, 0.3808], label='Mash with unique filtering (cutoff=2)')
+
+ax = plt.axes()
+ax.yaxis.set_major_formatter(FuncFormatter(lambda x, pos: '{:.0f}%'.format(100 * x)))
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+
+ax.plot(depths, containments_auto, label='Automatic filtering')
+ax.plot(depths, containments_one_filter, label='Naïve filtering (cutoff=2)')
+ax.plot(depths, containments_no_filter, label='Without filtering')
+
+plt.xscale('log')
+plt.xlabel('Depth of Isolate Sequencing')
+plt.ylabel('Containment in Assembled Genome')
+plt.legend()
+plt.savefig('depth_distance.png')
+plt.clf()
+
+ratios = [1, 2, 3, 6, 9, 12, 24, 36, 48, 52, 56, 60, 66, 72]
+containments_ec = [0.6875, 0.6993, 0.7009, 0.7015, 0.7017, 0.702, 0.7023, 0.7023, 0.7035, 0.7045, 0.7045, 0.9963420210333791, 0.9966139954853274, 0.9974421109316102]
+containments_sp = [0.2938, 0.2954, 0.2969, 0.2969, 0.2968, 0.2965, 0.2961, 0.296, 0.2947, 0.2936, 0.2936, 0.0028577960676726107, 0.002508151492350138, 0.0017501346257404416]
+containments_ec = []
+containments_sp = []
+for ratio in ratios:
+    print(ratio)
+    out = !cat <(head -1500000 ~/Downloads/SRR5132341.fasta) <(head -{ratio * 628000} ~/Downloads/SRR5282566.fasta) | ./target/release/finch dist -n 10000 -f --no-strict - assembly_ec.sk
+    containments_ec.append(json.loads(out[0])[0]['containment'])
+    out = !cat <(head -1500000 ~/Downloads/SRR5132341.fasta) <(head -{ratio * 628000} ~/Downloads/SRR5282566.fasta) | ./target/release/finch dist -n 10000 -f --no-strict - assembly_sp.sk
+    containments_sp.append(json.loads(out[0])[0]['containment'])
+
+    # out = !cat <(head -1500000 ~/Downloads/SRR5132341.fasta) <(head -{ratio * 628000} ~/Downloads/SRR5282566.fasta) | ./target/release/finch hist -n 10000 -f --no-strict -
+    # plt.plot(json.loads(out[0])['-'], label="{}:1".format(ratio))
+
+x = [10 * i for i in ratios]
+
+ax = plt.axes()
+ax.yaxis.set_major_formatter(FuncFormatter(lambda x, pos: '{:.1f}%'.format(100 * x)))
+
+# expected containment = 4587291. / (1963942 + 4587291)
+ax.axhline(4587291. / (1963942 + 4587291), lw=1, color='k')
+ax.fill_between(x, 0, containments_ec, facecolor='blue', alpha=0.6)
+ax.fill_between(x, [1 - i for i in containments_sp], 1, facecolor='green', alpha=0.6)
+plt.xlim(10, 720)
+plt.xlabel('E. coli depth with S. pneumonaniae constant at 10x')
+plt.ylim(0.6, 0.8)
+plt.ylabel('% unique kmers detected')
+plt.savefig('two_species_depth.png')
+plt.clf()

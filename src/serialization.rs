@@ -79,12 +79,12 @@ impl JSONSketch {
             let kmer;
             match self.kmers {
                 Some(ref v) => kmer = v[i].clone().into_bytes(),
-                None => return None,
+                None => kmer = Vec::new(),
             }
             let count;
             match self.counts {
                 Some(ref v) => count = v[i],
-                None => return None,
+                None => count = 1,
             }
             kmercount_list.push(KmerCount {
                 hash: hash,
