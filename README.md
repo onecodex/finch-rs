@@ -41,10 +41,10 @@ Notably, this strategy performs well across sequencing depths, while fixed cutof
 In addition to some of the memory safety guarentees that Rust enables, we also see considerable speed gains over existing implementations.
 Ideally, hashing should be the rate-limiting step in MinHashing. Profiling indicates `finch` spends about a third of its time in `murmurhash3_x64_128` so we should be within an order of magnitude of this theoretical limit.
 
-|                 | Mash | Sourmash | Finch (no filtering) | Finch (automatic filtering) |
-|-----------------|------|----------|----------------------|-----------------------------|
-| Time            | 238s | 518s     | **99s**              | 104s                        |
-| Max Memory (Mb) | 1.2  | 13.9     | 21.8                 | 60.0                        |
+|                 | Mash    | Sourmash | Finch (no filtering) | Finch (automatic filtering) |
+|-----------------|---------|----------|----------------------|-----------------------------|
+| Time (s)        | 238     | 518      | **99**               | 104                         |
+| Max Memory (Mb) | **1.2** | 13.9     | 21.8                 | 60.0                        |
 
 > *Note: Benchmarks run on an Early 2015 Macbook Pro. Benchmark is sketching a 4.8Gb FASTQ file ([SRR5132341.fastq](https://www.ncbi.nlm.nih.gov/sra/?term=SRR5132341)). Benchmarks used the following commits for Mash ([23776db](https://github.com/marbl/Mash/commit/23776dbe368d398639ec40f133edc06329dc3da8)) and sourmash ([5da5ee7](https://github.com/dib-lab/sourmash/commit/5da5ee7c72281ff05cb90d6ce3e8bc4d316998c5))*
 

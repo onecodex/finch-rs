@@ -147,6 +147,7 @@ fn main() {
              .short("d")
              .long("max-dist")
              .help("Only report distances under this threshold")
+             .default_value("1.0")
              .takes_value(true))
         .arg(Arg::with_name("mash_mode")
              .short("m")
