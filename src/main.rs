@@ -24,7 +24,7 @@ mod statistics;
 use distance::distance;
 use filtering::{FilterParams, filter_sketch};
 use minhashes::MinHashKmers;
-use serialization::{JSONSketch, JSONMultiSketch};
+use serialization::{JSONSketch, JSONMultiSketch, SketchDistance};
 use statistics::{hist, cardinality};
 
 const FINCH_EXT: &'static str = ".sk";
@@ -55,7 +55,6 @@ macro_rules! output_to {
             },
         }
     }
-
 }
 
 macro_rules! add_kmer_options {
@@ -140,9 +139,14 @@ fn main() {
         .arg(Arg::with_name("queries")
              .short("q")
              .long("queries")
-             .help("All distances are from these sketches")
+             .help("All distances are from these sketches (must be in the first file)")
              .multiple(true)
              .conflicts_with("pairwise")
+             .takes_value(true))
+        .arg(Arg::with_name("max_distance")
+             .short("d")
+             .long("max-dist")
+             .help("Only report distances under this threshold")
              .takes_value(true))
         .arg(Arg::with_name("mash_mode")
              .short("m")
@@ -180,115 +184,111 @@ fn main() {
         .get_matches();
 
     if let Some(matches) = matches.subcommand_matches("sketch") {
-        let filenames: Vec<_> = matches.values_of("INPUT").unwrap().collect();
         if matches.is_present("output_file") || matches.is_present("std_out") {
-            let sketches = open_mash_files(filenames, matches);
-            match sketches {
-                Ok(s) => {
-                    output_to!(s, matches);
-                },
-                Err(e) => panic!(e),
-            }
+            let sketches = parse_all_mash_files(matches).unwrap();
+            output_to!(sketches, matches);
         } else {
             // "sketch in place"
-            for filename in &filenames {
+            parse_mash_files(matches, |multisketch, filename| {
                 let out_filename = filename.to_string() + FINCH_EXT;
-                let sketches = open_mash_files(vec![filename], matches);
-                match sketches {
-                    Ok(s) => {
-                        let mut out = File::create(out_filename).unwrap();
-                        let _ = out.write_all(&serde_json::to_vec(&s).unwrap());
-                    },
-                    Err(e) => panic!(e),
-                }
-            }
+                let mut out = File::create(out_filename).unwrap();
+                let _ = out.write_all(&serde_json::to_vec(&multisketch).unwrap());
+            }).unwrap();
         }
     } else if let Some(matches) = matches.subcommand_matches("dist") {
-        let filenames: Vec<_> = matches.values_of("INPUT").unwrap().collect();
         let mash_mode = matches.is_present("mash_mode");
 
-        let all_sketch_objs = open_mash_files(filenames, matches).unwrap();
-        let all_sketches = all_sketch_objs.sketches;
+        let max_dist = matches.value_of("max_distance").unwrap().parse::<f64>().map_err(|_| {
+            format!("max-distance must be a number")
+        }).and_then(|r| {
+            if 0f64 <= r && r <= 1f64 {
+                return Ok(r);
+            }
+            Err(format!("max-distance must be 0 and 1"))
+        }).unwrap();
 
-        let mut query_pos: HashSet<usize> = HashSet::with_capacity(all_sketches.len());
+        // some special logic if we're doing a pairwise comparison
         if matches.is_present("pairwise") {
-            query_pos = (0..all_sketches.len()).collect();
-        } else if matches.is_present("queries") {
+            let mut distances = Vec::new();
+            let all_sketches = parse_all_mash_files(matches).unwrap();
+            distances.extend(calc_sketch_distances(&all_sketches.sketches, &all_sketches.sketches, mash_mode, max_dist));
+
+            output_to!(distances, matches);
+            return;
+        }
+
+        let filenames: Vec<_> = matches.values_of("INPUT").unwrap().collect();
+        let mut filename_iter = filenames.iter();
+        let filename = filename_iter.next().ok_or("At least one filename must be specified").unwrap();
+
+        let first_sketch = open_mash_file(filename, matches, None).unwrap();
+
+        // find the query sketches in the first file
+        let mut query_sketches = Vec::new();
+        if matches.is_present("queries") {
             let query_names: HashSet<String> = matches.values_of("queries").unwrap().map(|s| s.to_string()).collect();
 
-            for (i, sketch) in all_sketches.iter().enumerate() {
+            for sketch in first_sketch.sketches.iter() {
                 if query_names.contains(&sketch.name) {
-                    query_pos.insert(i);
+                    query_sketches.push(sketch.clone());
                 }
             }
         } else {
-            query_pos.insert(0);
-        }
-        let mut distances = Vec::new();
-        for raw_sketch1 in all_sketches.iter()
-                                       .enumerate()
-                                       .filter(|&(i, _)| query_pos.contains(&i))
-                                       .map(|(_, s)| s)
-        {
-            let sketch1 = &raw_sketch1.get_kmers().unwrap();
-            for raw_sketch2 in all_sketches.iter() {
-                if raw_sketch1 == raw_sketch2 {
-                    continue;
-                }
-                let sketch2 = &raw_sketch2.get_kmers().unwrap();
-                let distance = distance(&sketch1, &sketch2, &raw_sketch1.name, &raw_sketch2.name, mash_mode).unwrap();
-                distances.push(distance);
+            if first_sketch.sketches.len() < 1 {
+                panic!("No sketches in first file!");
             }
+            query_sketches.push(first_sketch.sketches[0].clone());
+        }
+
+        let mut distances = calc_sketch_distances(&query_sketches, &first_sketch.sketches, mash_mode, max_dist);
+        for filename in filename_iter {
+            let sketches = open_mash_file(filename, matches, Some(&first_sketch)).unwrap();
+            distances.extend(calc_sketch_distances(&query_sketches, &sketches.sketches, mash_mode, max_dist));
         }
         output_to!(distances, matches);
     } else if let Some(matches) = matches.subcommand_matches("hist") {
-        let filenames: Vec<_> = matches.values_of("INPUT").unwrap().collect();
+        let mut hist_map: HashMap<String, Vec<u64>> = HashMap::new();
+        parse_mash_files(matches, |multisketch, _| {
+            for sketch in multisketch.sketches.iter() {
+                hist_map.insert(sketch.name.to_string(), hist(&sketch.get_kmers().unwrap()));
+            }
+        }).unwrap();
 
-        let all_sketch_objs = open_mash_files(filenames, matches).unwrap();
-        let all_sketches = all_sketch_objs.sketches;
-
-        let mut hist_map: HashMap<&str, Vec<u64>> = HashMap::new();
-        for sketch in all_sketches.iter() {
-            hist_map.insert(&sketch.name, hist(&sketch.get_kmers().unwrap()));
-        }
         output_to!(hist_map, matches);
     } else if let Some(matches) = matches.subcommand_matches("info") {
-        let filenames: Vec<_> = matches.values_of("INPUT").unwrap().collect();
-
-        let all_sketch_objs = open_mash_files(filenames, matches).unwrap();
-        let all_sketches = all_sketch_objs.sketches;
-
-        for sketch in all_sketches.iter() {
-            print!("{}", &sketch.name);
-            if let Some(l) = sketch.seqLength {
-                println!(" (from {}bp)", l);
-            } else {
-                println!("");
-            }
-            if let Some(kmers) = sketch.get_kmers() {
-                if let Ok(c) = cardinality(&kmers) {
-                    println!("  Estimated # of Unique Kmers: {}", c);
+        parse_mash_files(matches, |multisketch, _| {
+            for sketch in multisketch.sketches.iter() {
+                print!("{}", &sketch.name);
+                if let Some(l) = sketch.seqLength {
+                    println!(" (from {}bp)", l);
+                } else {
+                    println!("");
                 }
+                if let Some(kmers) = sketch.get_kmers() {
+                    if let Ok(c) = cardinality(&kmers) {
+                        println!("  Estimated # of Unique Kmers: {}", c);
+                    }
 
-                let histogram = hist(&kmers);
-                let mean = histogram.iter().enumerate()
-                    .map(|(i, v)| (i as f32 * *v as f32, *v as f32))
-                    .fold((0f32, 0f32), |e, s| (e.0 + s.0, e.1 + s.1));
-                println!("  Estimated Average Depth: {}x", mean.0 / mean.1);
+                    let histogram = hist(&kmers);
+                    let mean = histogram.iter().enumerate()
+                        .map(|(i, v)| (i as f32 * *v as f32, *v as f32))
+                        .fold((0f32, 0f32), |e, s| (e.0 + s.0, e.1 + s.1));
+                    println!("  Estimated Average Depth: {}x", mean.0 / mean.1);
 
-                let mut total_gc: u64 = 0;
-                for kmer in &kmers {
-                    total_gc += kmer.kmer.iter().map(|b| {
-                        match *b {
-                            b'G' | b'g' | b'C' | b'c' => kmer.count as u64,
-                            _ => 0,
-                        }
-                    }).sum();
+                    let mut total_gc: u64 = 0;
+                    for kmer in &kmers {
+                        total_gc += kmer.kmer.iter().map(|b| {
+                            match *b {
+                                b'G' | b'g' | b'C' | b'c' => kmer.count as u64,
+                                _ => 0,
+                            }
+                        }).sum();
+                    }
+                    let total_bases = mean.0 * kmers[0].kmer.len() as f32;
+                    println!("  Estimated % GC: {}%", 100f32 * total_gc as f32 / total_bases);
                 }
-                let total_bases = mean.0 * kmers[0].kmer.len() as f32;
-                println!("  Estimated % GC: {}%", 100f32 * total_gc as f32 / total_bases);
             }
-        }
+        }).unwrap();
     }
 }
 
@@ -296,9 +296,12 @@ fn main() {
 pub fn mash_files(filenames: Vec<&str>, n_hashes: usize, final_size: usize, kmer_length: u8, filters: &mut FilterParams, no_strict: bool, seed: u64) -> Result<JSONMultiSketch, String> {
     let mut sketches = Vec::with_capacity(filenames.len());
     for filename in &filenames {
-        let mut minhash = MinHashKmers::new(n_hashes, seed);
         let mut seq_len = 0u64;
         let path = Path::new(filename);
+        let mut minhash = match filters.filter_on {
+            Some(true) | None => MinHashKmers::new(n_hashes, seed),
+            Some(false) => MinHashKmers::new(final_size, seed),
+        };
         fastx_cli(path.to_str().ok_or("Couldn't make path into string")?, |seq_type| {
             // disable filtering for FASTA files unless it was explicitly specified
             if let None = filters.filter_on {
@@ -344,16 +347,49 @@ pub fn mash_files(filenames: Vec<&str>, n_hashes: usize, final_size: usize, kmer
     })
 }
 
-fn open_mash_files(filenames: Vec<&str>, matches: &ArgMatches) -> Result<JSONMultiSketch, String> {
+fn parse_all_mash_files(matches: &ArgMatches) -> Result<JSONMultiSketch, String> {
+    let filenames: Vec<_> = matches.values_of("INPUT").unwrap().collect();
     let mut filename_iter = filenames.iter();
     let filename = filename_iter.next().ok_or("At least one filename must be specified")?;
 
-    let mut all_sketch_objs = open_mash_file(filename, matches, None)?;
+    let mut sketches = open_mash_file(filename, matches, None)?;
     for filename in filename_iter {
-        let new_sketch = open_mash_file(filename, matches, Some(&all_sketch_objs))?;
-        all_sketch_objs.sketches.extend_from_slice(&new_sketch.sketches);
+        let sketch = open_mash_file(filename, matches, Some(&sketches))?;
+        sketches.sketches.extend_from_slice(&sketch.sketches);
     }
-    Ok(all_sketch_objs)
+    Ok(sketches)
+}
+
+fn parse_mash_files<P>(matches: &ArgMatches, ref mut parser: P) -> Result<(), String> where P: FnMut(&JSONMultiSketch, &str) -> () {
+    let filenames: Vec<_> = matches.values_of("INPUT").unwrap().collect();
+    let mut filename_iter = filenames.iter();
+    let filename = filename_iter.next().ok_or("At least one filename must be specified")?;
+
+    let first_sketch = open_mash_file(filename, matches, None)?;
+    parser(&first_sketch, filename);
+    for filename in filename_iter {
+        let sketch = open_mash_file(filename, matches, Some(&first_sketch))?;
+        parser(&sketch, filename);
+    }
+    Ok(())
+}
+
+fn calc_sketch_distances(ref_sketches: &[JSONSketch], query_sketches: &[JSONSketch], mash_mode: bool, max_distance: f64) -> Vec<SketchDistance> {
+    let mut distances = Vec::new();
+    for ref_sketch in ref_sketches.iter() {
+        let rsketch = &ref_sketch.get_kmers().unwrap();
+        for query_sketch in query_sketches.iter() {
+            if query_sketch == ref_sketch {
+                continue;
+            }
+            let qsketch = &query_sketch.get_kmers().unwrap();
+            let distance = distance(&qsketch, &rsketch, &query_sketch.name, &ref_sketch.name, mash_mode).unwrap();
+            if distance.mashDistance <= max_distance {
+                distances.push(distance);
+            }
+        }
+    }
+    distances
 }
 
 fn open_mash_file(filename: &str, matches: &ArgMatches, default_sketch: Option<&JSONMultiSketch>) -> Result<JSONMultiSketch, String> {

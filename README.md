@@ -43,10 +43,10 @@ Ideally, hashing should be the rate-limiting step in MinHashing. Profiling indic
 
 |                 | Mash | Sourmash | Finch (no filtering) | Finch (automatic filtering) |
 |-----------------|------|----------|----------------------|-----------------------------|
-| Time            | 238s | 518s     |                      | **99s**                     |
-| Max Memory (Mb) | 1.2  | 13.9     |                      | Up to 60Mb                  |
+| Time            | 238s | 518s     | **99s**              | 104s                        |
+| Max Memory (Mb) | 1.2  | 13.9     | 21.8                 | 60.0                        |
 
-> *Note: Benchmarks run on an Early 2015 Macbook Pro. Benchmark is sketching a 4.8Gb FASTQ file ([SRR5132341.fastq](https://www.ncbi.nlm.nih.gov/sra/?term=SRR5132341)). Sketching most FASTA files is extremely fast across all implementations. Benchmarks used the following commits for Mash ([23776db](https://github.com/marbl/Mash/commit/23776dbe368d398639ec40f133edc06329dc3da8)) and sourmash ([5da5ee7](https://github.com/dib-lab/sourmash/commit/5da5ee7c72281ff05cb90d6ce3e8bc4d316998c5))*
+> *Note: Benchmarks run on an Early 2015 Macbook Pro. Benchmark is sketching a 4.8Gb FASTQ file ([SRR5132341.fastq](https://www.ncbi.nlm.nih.gov/sra/?term=SRR5132341)). Benchmarks used the following commits for Mash ([23776db](https://github.com/marbl/Mash/commit/23776dbe368d398639ec40f133edc06329dc3da8)) and sourmash ([5da5ee7](https://github.com/dib-lab/sourmash/commit/5da5ee7c72281ff05cb90d6ce3e8bc4d316998c5))*
 
 ## Usage ##
 
