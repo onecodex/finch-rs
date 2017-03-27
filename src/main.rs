@@ -1,12 +1,14 @@
 #[macro_use]
 extern crate serde_derive;
 
+#[macro_use]
+extern crate clap;
+
 use std::fs::File;
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::path::Path;
 
-extern crate clap;
 extern crate murmurhash3;
 extern crate needletail;
 extern crate serde;
@@ -117,7 +119,7 @@ macro_rules! add_kmer_options {
 
 fn main() {
     let mut sketch_command = SubCommand::with_name("sketch")
-        .about("Sketch FASTA/Q file(s) into MASH sketches")
+        .about("Create sketches from FASTA/Q file(s)")
         .arg(Arg::with_name("INPUT")
              .help("The file(s) to sketch")
              .multiple(true)
@@ -126,7 +128,7 @@ fn main() {
     add_kmer_options!(sketch_command);
 
     let mut dist_command = SubCommand::with_name("dist")
-        .about("Compute distances between MASH sketches")
+        .about("Compute distances between sketches")
         .arg(Arg::with_name("INPUT")
              .help("Sketchfile(s) to make comparisons for")
              .multiple(true)
@@ -139,7 +141,7 @@ fn main() {
         .arg(Arg::with_name("queries")
              .short("q")
              .long("queries")
-             .help("All distances are from these sketches (must be in the first file)")
+             .help("All distances are from these sketches (sketches must be in the first file)")
              .multiple(true)
              .conflicts_with("pairwise")
              .takes_value(true))
@@ -174,10 +176,11 @@ fn main() {
     add_output_options!(info_command);
     add_kmer_options!(info_command);
 
-    let matches = App::new("finch").version("0.1.0")
+    let matches = App::new("finch").version(crate_version!())
         .author("Roderick Bovee & One Codex <roderick@onecodex.com>")
-        .about("Work with MASH sketches")
+        .about("Tool for working with genomic MinHash sketches")
         .setting(AppSettings::VersionlessSubcommands)
+        .setting(AppSettings::ArgRequiredElseHelp)
         .subcommand(sketch_command)
         .subcommand(dist_command)
         .subcommand(hist_command)
