@@ -2,8 +2,10 @@
 
 [![CircleCI](https://circleci.com/gh/onecodex/finch-rs.svg?style=shield&circle-token=4fa4296a595f0d0e8dfcea750d76c39576f2df73)](https://circleci.com/gh/onecodex/finch-rs)
 
-Finch is an implementation of min-wise independent permutation locality sensitive hashing ("MinHashing") for application to genomic data ("Mashing").
+Finch is an implementation of min-wise independent permutation locality sensitive hashing ("MinHashing") for genomic data.
 This repository provides a library and command-line interface that reimplements much of One Codex's [existing internal clustering/sequence search tool](http://blog.onecodex.com/2016/02/11/clustering-and-basespace/) (and adds new features/extensions!) in Rust.
+
+**Installation:** You may build Finch from source using Rust >= `1.15` and the command `cargo build --release` or [download a prebuilt binary](https://github.com/onecodex/finch-rs/releases).
 
 ## Design goals
 We have 3 primary design goals with Finch:
@@ -17,13 +19,13 @@ We have 3 primary design goals with Finch:
 
 ### Support for counts
 Finch is one of the first MinHash implementations to support tracking the abundances of each unique _k_-mer/minmer.
-This allows useful quick interpretations of data (e.g. visualizing sequencing depth with `finch hist`) in addition to laying the support for more advanced filtering (implemented here) and distance measures (a future area for investigation and study).
-Because Finch also supports the [new "Mash" JSON compatibility format](https://github.com/marbl/Mash/blob/master/src/mash/schema-1.0.0.json), we're able to save this count information for downstream processing and comparisons.
+This allows useful quick interpretations of data (e.g. visualizing sequencing depth with `finch hist`) in addition to laying the support for more advanced filtering (implemented here) and count-aware distance measures (a future area for investigation and study).
+Because Finch also supports the [new Mash JSON compatibility format](https://github.com/marbl/Mash/blob/master/src/mash/schema-1.0.0.json), we're able to save this count information for downstream processing and comparisons.
 
- > :warning: &nbsp;Note that although Finch supports the common JSON interchange format, there may still be incompatibilites due to incompaible hashing seed values (Finch uses a seed of `0`, while Mash uses `42`. See [this issue](https://github.com/marbl/Mash/issues/12) for more discussion).
+ > :warning: &nbsp;Note that although Finch supports the common JSON interchange format, there may still be incompatibilites due to incompaible hashing seed values (Finch uses a seed of `0`, while Mash uses `42`; see [this issue](https://github.com/marbl/Mash/issues/12) for more discussion).
 
 ### Filtering
-A key design goal for Finch is to stably, accurately sketch variable depth sequencing of bacterial isolates (i.e., to not require a high quality assembly). While Mash includes the ability to specify a fixed absolute cutoff (or use a Bloom filter to filter out unique minmers in a sample), in practice this filtering mechanism performs poorly across varied sequencing depths, genome sizes, and sequencing error profiles. This filtering approach extends several of the ideas in the original Mash paper, as well as [prior work on clustering clinical _C. diff_ isolates](http://www.dmidjournal.com/article/S0732-8893(16)30322-4/abstract).
+A key design goal for Finch was the ability to accurately – and _stably_ – sketch variable depth sequencing of bacterial isolates (i.e., to not require a high quality assembly). While Mash includes the ability to specify a fixed absolute cutoff (or use a Bloom filter to filter out unique minmers in a sample), in practice this filtering mechanism performs poorly across varied sequencing depths, genome sizes, and sequencing error profiles. The Finch filtering approach implemented here extends several of the ideas in the original Mash paper, as well as [prior work on clustering clinical _C. diff_ isolates](http://www.dmidjournal.com/article/S0732-8893(16)30322-4/abstract).
 
 Finch includes two classes of automated filtering (on by default for FASTQs) to address this challenge:
 
@@ -41,12 +43,12 @@ Notably, this strategy performs well across sequencing depths, while fixed cutof
 In addition to some of the memory safety guarentees that Rust enables, we also see considerable speed gains over existing implementations.
 Ideally, hashing should be the rate-limiting step in MinHashing. Profiling indicates `finch` spends about a third of its time in `murmurhash3_x64_128` so we should be within an order of magnitude of this theoretical limit.
 
-|                 | Mash    | Sourmash | Finch (no filtering) | Finch (automatic filtering) |
-|-----------------|---------|----------|----------------------|-----------------------------|
-| Time (s)        | 238     | 518      | **99**               | 104                         |
-| Max Memory (Mb) | **1.2** | 13.9     | 21.8                 | 60.0                        |
+|                 | Mash    | Mash (filtered) | Sourmash | Finch   | Finch (filtered) |
+|-----------------|---------|-----------------|----------|---------|------------------|
+| Time            | 238s    | 276s            | 518s     | **99s** | 104s             |
+| Max Memory (Mb) | **1.2** | 501.1           | 13.9     | 21.8    | 60.0             |60.0                        |
 
-> *Note: Benchmarks run on an Early 2015 Macbook Pro. Benchmark is sketching a 4.8Gb FASTQ file ([SRR5132341.fastq](https://www.ncbi.nlm.nih.gov/sra/?term=SRR5132341)). Benchmarks used the following commits for Mash ([23776db](https://github.com/marbl/Mash/commit/23776dbe368d398639ec40f133edc06329dc3da8)) and sourmash ([5da5ee7](https://github.com/dib-lab/sourmash/commit/5da5ee7c72281ff05cb90d6ce3e8bc4d316998c5))*
+> *Note: Benchmarks run on an Early 2015 Macbook Pro. Benchmark is sketching a 4.8Gb FASTQ file ([SRR5132341.fastq](https://www.ncbi.nlm.nih.gov/sra/?term=SRR5132341)) with a sketch size of _n=10,000_. Finch filtered results use the default options, while Mash uses `-b 500Mb` to allocate a 500Mb Bloom filter. Benchmarks used the following commits for Mash ([23776db](https://github.com/marbl/Mash/commit/23776dbe368d398639ec40f133edc06329dc3da8)) and sourmash ([5da5ee7](https://github.com/dib-lab/sourmash/commit/5da5ee7c72281ff05cb90d6ce3e8bc4d316998c5))*
 
 ## Usage ##
 
@@ -55,9 +57,9 @@ Finch supports four primary operations, with many of these operations taking sim
 ### Shared Parameters ###
 
 Finch can take many parameters to control how sketching is performed (and these options are also available for the `dist`, `hist`, and `info` commands).
- - `-n <N>` / `--n-hashes <N>` controls the overall size of the sketch (higher values give better resolution in comparisons).
- - `-k <K>` / `--kmer-length <K>` sets the size of the kmers to be hashed (higher values make comparisons much more taxonomically specific).
- - `--seed <S>` sets the seed for hashing. This should only be changed if directly exporting sketches for comparison with other versions of the Mash algorithm that use a non-zero default seed.
+ - `-n <N>` / `--n-hashes <N>` controls the overall size of the sketch (higher values give better resolution in comparisons). Default `10000`.
+ - `-k <K>` / `--kmer-length <K>` sets the size of the kmers to be hashed (higher values make comparisons much more taxonomically specific). Default `21`.
+ - `--seed <S>` sets the seed for hashing. This should only be changed if directly exporting sketches for comparison with other versions of the Mash algorithm that use a non-zero default seed. Default `0`.
 
 After sketching, filtering is performed and can be controlled through several options:
  - `-f` / `--filter` / `--no-filter` determines whether filtering is applied or not (if not specified, filtering is performed for FASTQ files and not performed for FASTA files by default)
@@ -100,6 +102,8 @@ If you'd like identical distances, the `--mash` flag will use their original cou
 
 `finch hist` will output a histogram in JSON format for each sketch provided.
 The histogram is a list of the number of minmers at each depth, e.g. `{"sketch_name": [1, 0, 1]}` for a sketch with two minmers, one with a depth of 1 (first position) and one with a depth of 3 (third position).
+
+> :warning: &nbsp; You can use the following command with Matplotlib to get a quick histogram: `finch hist test.fastq.sk | python -c 'import json; import matplotlib.pyplot as plt; import sys; v = json.loads(sys.stdin.read()).values()[0]; plt.plot(range(1, len(v)+1), v); plt.show()'`. Note that the `finch hist` JSON output is likely to change in a future version to, e.g., a more compact `{count: value}` format or similar.
 
 ### `finch info` ###
 
