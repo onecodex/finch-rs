@@ -64,7 +64,7 @@ macro_rules! add_kmer_options {
              .long("n-hashes")
              .help("How many kmers/hashes to store")
              .takes_value(true)
-             .default_value("2000"))
+             .default_value("1000"))
         .arg(Arg::with_name("seed")
              .long("seed")
              .help("Seed murmurhash with this value")
