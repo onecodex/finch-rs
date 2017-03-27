@@ -50,12 +50,21 @@ macro_rules! output_to {
     ($object: ident, $matches: ident) => {
         let output = $matches.value_of("output_file");
         match output {
-            None => println!("{}", serde_json::to_string(&$object).unwrap()),
-            Some(out_filename) => {
-                let mut out = File::create(out_filename).unwrap();
-                let _ = out.write_all(&serde_json::to_vec(&$object).unwrap());
+            None => {
+                let text = serde_json::to_string(&$object).map_err(|_| {
+                    "Could not serialize JSON to string".to_string()
+                })?;
+                println!("{}", text);
             },
-        }
+            Some(out_filename) => {
+                let mut out = File::create(out_filename).map_err(|_| {
+                    format!("Could not create {}", out_filename)
+                })?;
+                let _ = out.write_all(&serde_json::to_vec(&$object).map_err(|_| {
+                    "Could not serialize JSON to bytes".to_string()
+                })?);
+            },
+        };
     }
 }
 
@@ -118,6 +127,13 @@ macro_rules! add_kmer_options {
 
 
 fn main() {
+    if let Err(e) = run() {
+        let mut stderr = std::io::stderr();
+        writeln!(&mut stderr, "Error: {}", e).unwrap();
+    }
+}
+
+fn run() -> Result<(), String> {
     let mut sketch_command = SubCommand::with_name("sketch")
         .about("Create sketches from FASTA/Q file(s)")
         .arg(Arg::with_name("INPUT")
@@ -177,7 +193,7 @@ fn main() {
     add_kmer_options!(info_command);
 
     let matches = App::new("finch").version(crate_version!())
-        .author("Roderick Bovee & One Codex <roderick@onecodex.com>")
+        .author(crate_authors!())
         .about("Tool for working with genomic MinHash sketches")
         .setting(AppSettings::VersionlessSubcommands)
         .setting(AppSettings::ArgRequiredElseHelp)
@@ -189,48 +205,52 @@ fn main() {
 
     if let Some(matches) = matches.subcommand_matches("sketch") {
         if matches.is_present("output_file") || matches.is_present("std_out") {
-            let sketches = parse_all_mash_files(matches).unwrap();
+            let sketches = parse_all_mash_files(matches)?;
             output_to!(sketches, matches);
         } else {
             // "sketch in place"
             parse_mash_files(matches, |multisketch, filename| {
                 let out_filename = filename.to_string() + FINCH_EXT;
-                let mut out = File::create(out_filename).unwrap();
+                let mut out = File::create(&out_filename).map_err(|_| {
+                    format!("Could not open {}", out_filename)
+                }).unwrap();
                 let _ = out.write_all(&serde_json::to_vec(&multisketch).unwrap());
-            }).unwrap();
+            })?;
         }
     } else if let Some(matches) = matches.subcommand_matches("dist") {
         let mash_mode = matches.is_present("mash_mode");
 
-        let max_dist = matches.value_of("max_distance").unwrap().parse::<f64>().map_err(|_| {
+        let max_dist = matches.value_of("max_distance").ok_or("Bad max-distance")?.parse::<f64>().map_err(|_| {
             format!("max-distance must be a number")
         }).and_then(|r| {
             if 0f64 <= r && r <= 1f64 {
                 return Ok(r);
             }
             Err(format!("max-distance must be 0 and 1"))
-        }).unwrap();
+        })?;
 
         // some special logic if we're doing a pairwise comparison
         if matches.is_present("pairwise") {
             let mut distances = Vec::new();
-            let all_sketches = parse_all_mash_files(matches).unwrap();
+            let all_sketches = parse_all_mash_files(matches)?;
             distances.extend(calc_sketch_distances(&all_sketches.sketches, &all_sketches.sketches, mash_mode, max_dist));
 
             output_to!(distances, matches);
-            return;
+            return Ok(());
         }
 
-        let filenames: Vec<_> = matches.values_of("INPUT").unwrap().collect();
+        let filenames: Vec<_> = matches.values_of("INPUT").ok_or("Bad INPUT")?.collect();
         let mut filename_iter = filenames.iter();
-        let filename = filename_iter.next().ok_or("At least one filename must be specified").unwrap();
+        let filename = filename_iter.next().ok_or("At least one filename must be specified")?;
 
-        let first_sketch = open_mash_file(filename, matches, None).unwrap();
+        let first_sketch = open_mash_file(filename, matches, None)?;
 
         // find the query sketches in the first file
         let mut query_sketches = Vec::new();
         if matches.is_present("queries") {
-            let query_names: HashSet<String> = matches.values_of("queries").unwrap().map(|s| s.to_string()).collect();
+            let query_names: HashSet<String> = matches.values_of("queries").ok_or("Bad queries")?.map(|s| {
+                s.to_string()
+            }).collect();
 
             for sketch in first_sketch.sketches.iter() {
                 if query_names.contains(&sketch.name) {
@@ -239,14 +259,14 @@ fn main() {
             }
         } else {
             if first_sketch.sketches.len() < 1 {
-                panic!("No sketches in first file!");
+                return Err(String::from("No sketches in first file!"));
             }
             query_sketches.push(first_sketch.sketches[0].clone());
         }
 
         let mut distances = calc_sketch_distances(&query_sketches, &first_sketch.sketches, mash_mode, max_dist);
         for filename in filename_iter {
-            let sketches = open_mash_file(filename, matches, Some(&first_sketch)).unwrap();
+            let sketches = open_mash_file(filename, matches, Some(&first_sketch))?;
             distances.extend(calc_sketch_distances(&query_sketches, &sketches.sketches, mash_mode, max_dist));
         }
         output_to!(distances, matches);
@@ -256,7 +276,7 @@ fn main() {
             for sketch in multisketch.sketches.iter() {
                 hist_map.insert(sketch.name.to_string(), hist(&sketch.get_kmers().unwrap()));
             }
-        }).unwrap();
+        })?;
 
         output_to!(hist_map, matches);
     } else if let Some(matches) = matches.subcommand_matches("info") {
@@ -292,8 +312,9 @@ fn main() {
                     println!("  Estimated % GC: {}%", 100f32 * total_gc as f32 / total_bases);
                 }
             }
-        }).unwrap();
+        })?;
     }
+    Ok(())
 }
 
 
@@ -352,7 +373,7 @@ pub fn mash_files(filenames: Vec<&str>, n_hashes: usize, final_size: usize, kmer
 }
 
 fn parse_all_mash_files(matches: &ArgMatches) -> Result<JSONMultiSketch, String> {
-    let filenames: Vec<_> = matches.values_of("INPUT").unwrap().collect();
+    let filenames: Vec<_> = matches.values_of("INPUT").ok_or("Bad INPUT")?.collect();
     let mut filename_iter = filenames.iter();
     let filename = filename_iter.next().ok_or("At least one filename must be specified")?;
 
@@ -365,7 +386,7 @@ fn parse_all_mash_files(matches: &ArgMatches) -> Result<JSONMultiSketch, String>
 }
 
 fn parse_mash_files<P>(matches: &ArgMatches, ref mut parser: P) -> Result<(), String> where P: FnMut(&JSONMultiSketch, &str) -> () {
-    let filenames: Vec<_> = matches.values_of("INPUT").unwrap().collect();
+    let filenames: Vec<_> = matches.values_of("INPUT").ok_or("Bad INPUT")?.collect();
     let mut filename_iter = filenames.iter();
     let filename = filename_iter.next().ok_or("At least one filename must be specified")?;
 
@@ -397,9 +418,13 @@ fn calc_sketch_distances(ref_sketches: &[JSONSketch], query_sketches: &[JSONSket
 }
 
 fn open_mash_file(filename: &str, matches: &ArgMatches, default_sketch: Option<&JSONMultiSketch>) -> Result<JSONMultiSketch, String> {
-    let final_sketch_size = matches.value_of("n_hashes").unwrap().parse::<usize>().map_err(|_| "n_hashes must be an integer")?;
-    let seed = matches.value_of("seed").unwrap().parse::<u64>().map_err(|_| "seed must be an integer")?;
-    let kmer_length = matches.value_of("kmer_length").unwrap().parse::<u8>().map_err(|_| "kmer_length must be an integer < 256")?;
+    let final_sketch_size = matches.value_of("n_hashes").ok_or("Bad n_hashes")?.parse::<usize>().map_err(|_| {
+        "n_hashes must be an integer"
+    })?;
+    let seed = matches.value_of("seed").ok_or("Bad seed")?.parse::<u64>().map_err(|_| "seed must be an integer")?;
+    let kmer_length = matches.value_of("kmer_length").ok_or("Bad kmer_length")?.parse::<u8>().map_err(|_| {
+        "kmer_length must be an integer < 256"
+    })?;
 
     let no_strict = matches.is_present("no_strict");
     let filter_on = match (matches.is_present("filter"), matches.is_present("no_filter")) {
@@ -409,18 +434,18 @@ fn open_mash_file(filename: &str, matches: &ArgMatches, default_sketch: Option<&
         (false, false) => None,
     };
     let min_abun_filter = match matches.occurrences_of("min_abun_filter") > 0 {
-        true => Some(matches.value_of("min_abun_filter").unwrap().parse::<u16>().map_err(|_| {
+        true => Some(matches.value_of("min_abun_filter").ok_or("Bad min_abun_filter")?.parse::<u16>().map_err(|_| {
             format!("min_abun_filter must be a number greater than or equal to 0")
         })?),
         false => None,
     };
     let max_abun_filter = match matches.occurrences_of("max_abun_filter") > 0 {
-        true => Some(matches.value_of("max_abun_filter").unwrap().parse::<u16>().map_err(|_| {
+        true => Some(matches.value_of("max_abun_filter").ok_or("Bad max_abun_filter")?.parse::<u16>().map_err(|_| {
             format!("max_abun_filter must be a number greater than or equal to 0")
         })?),
         false => None,
     };
-    let err_filter = matches.value_of("err_filter").unwrap().parse::<f32>().map_err(|_| {
+    let err_filter = matches.value_of("err_filter").ok_or("Bad err_filter")?.parse::<f32>().map_err(|_| {
         format!("err-filter must be a number")
     }).and_then(|r| {
         if 0f32 <= r && r <= 100f32 / kmer_length as f32 {
@@ -428,7 +453,7 @@ fn open_mash_file(filename: &str, matches: &ArgMatches, default_sketch: Option<&
         }
         Err(format!("err-filter must be a percent between 0 and {}", 100f32 / kmer_length as f32))
     })?;
-    let strand_filter = matches.value_of("strand_filter").unwrap().parse::<f32>().map_err(|_| {
+    let strand_filter = matches.value_of("strand_filter").ok_or("Bad strand_filter")?.parse::<f32>().map_err(|_| {
         format!("strand-filter must be a number")
     }).and_then(|r| {
         if 0f32 <= r && r <= 1f32 {
@@ -445,7 +470,9 @@ fn open_mash_file(filename: &str, matches: &ArgMatches, default_sketch: Option<&
         strand_filter: strand_filter,
     };
 
-    let oversketch = matches.value_of("oversketch").unwrap().parse::<usize>().map_err(|_| "bad value for oversketch")?;
+    let oversketch = matches.value_of("oversketch").ok_or("Bad oversketch")?.parse::<usize>().map_err(|_| {
+        "bad value for oversketch"
+    })?;
     let sketch_size = final_sketch_size * oversketch;
 
     // if the file isn't a sketch file, we try to sketch it and pass the sketches back
