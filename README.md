@@ -3,9 +3,9 @@
 [![CircleCI](https://circleci.com/gh/onecodex/finch-rs.svg?style=shield&circle-token=4fa4296a595f0d0e8dfcea750d76c39576f2df73)](https://circleci.com/gh/onecodex/finch-rs)
 
 Finch is an implementation of min-wise independent permutation locality sensitive hashing ("MinHashing") for genomic data.
-This repository provides a library and command-line interface that reimplements much of One Codex's [existing internal clustering/sequence search tool](http://blog.onecodex.com/2016/02/11/clustering-and-basespace/) (and adds new features/extensions!) in Rust.
+This repository provides a library and command-line interface that reimplements much of One Codex's [existing internal clustering/sequence search tool](http://blog.onecodex.com/2016/02/11/clustering-and-basespace/) (and adds new features/extensions!) in [Rust](https://www.rust-lang.org/en-US/).
 
-**Installation:** You may build Finch from source using Rust >= `1.15` and the command `cargo build --release` or [download a prebuilt binary](https://github.com/onecodex/finch-rs/releases).
+**Installation:** You may build Finch from source using Rust >= `1.15`, install via `cargo install finch` if you have Rust's Cargo package manager, or [download a prebuilt binary](https://github.com/onecodex/finch-rs/releases).
 
 ## Design goals
 We have 3 primary design goals with Finch:
@@ -70,7 +70,7 @@ After sketching, filtering is performed and can be controlled through several op
 Note that if there aren't enough kmers left from the oversketch to satisfy the sketch size, sketching will fail.
 There are two options that may help:
  - `--oversketch <N>` can be used to increase the size of the oversketch (normally 200x) and increase the likelihood that the filtered version will be big enough.
- - `--no-strict` will allow finch to proceed with a sketch smaller than the specified size. Use with caution.
+ - `--no-strict` will allow Finch to proceed with a sketch smaller than the specified size. Use with caution.
 
 
 ### `finch sketch` ###
@@ -111,6 +111,8 @@ The histogram is a list of the number of minmers at each depth, e.g. `{"sketch_n
 
 > :warning: &nbsp;Note that the values returned from this are approximate and the algoritms used to calculate are still rough and liable to change.
 
+## Example Data ##
+We've sketched the NCBI RefSeq collection (as of March 27, 2017 using [this script](https://github.com/DerrickWood/kraken/blob/master/scripts/download_genomic_library.sh)) and made tarballs with individual sketches for each bacterial and viral genome available. Links: [_k=21_ and _n=1,000_](https://static.onecodex.com/public/finch-rs/refseq_sketches_21_1000.tar.gz), [_k=31_ and _n=1,000_](https://static.onecodex.com/public/finch-rs/refseq_sketches_31_1000.tar.gz), [_k=21_ and _n=10,000_](https://static.onecodex.com/public/finch-rs/refseq_sketches_21_10000.tar.gz), and [_k=31_ and _n=10,000_](https://static.onecodex.com/public/finch-rs/refseq_sketches_31_10000.tar.gz).
 
 ## References ##
 
