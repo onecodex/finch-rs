@@ -2,6 +2,12 @@
 name = "finch"
 version = "0.1.0"
 authors = ["Roderick Bovee & One Codex <roderick@onecodex.com>"]
+description = "An implementation of min-wise independent permutation locality sensitive hashing ('MinHashing') for genomic data and command-line utility for manipulation."
+keywords = ["minhash", "bioinformatics", "sketches"]
+categories = ["command-line-utilities", "science"]
+repository = "https://github.com/onecodex/finch-rs"
+license = "MIT"
+readme = "./README.md"
 
 [dependencies]
 clap = "~2.19.0"
@@ -10,6 +16,3 @@ needletail = "~0.1.1"
 serde = "0.9"
 serde_derive = "0.9"
 serde_json = "0.9"
-
-[profile.release]
-debug = true
