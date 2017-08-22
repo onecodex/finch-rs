@@ -1,6 +1,6 @@
 [package]
 name = "finch"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Roderick Bovee & One Codex <roderick@onecodex.com>"]
 description = "An implementation of min-wise independent permutation locality sensitive hashing ('MinHashing') for genomic data and command-line utility for manipulation."
 keywords = ["minhash", "bioinformatics", "sketches"]
@@ -10,9 +10,9 @@ license = "MIT"
 readme = "./README.md"
 
 [dependencies]
-clap = "~2.19.0"
+clap = "~2.26.0"
 murmurhash3 = "~0.0.5"
-needletail = "~0.1.1"
-serde = "0.9"
-serde_derive = "0.9"
-serde_json = "0.9"
+needletail = "~0.1.2"
+serde = "1.0"
+serde_derive = "1.0"
+serde_json = "1.0.2"
