@@ -18,10 +18,10 @@ bibliography: paper.bib
 ---
 # Summary
 
-MinHash [@Broder1997] is a document similarity estimation technique that has been applied to the theoretical bioinformatics problems of sequence search and genome comparisons [@Ondov2016; @Brown2016] and used for testing infectious disease transmission hypotheses [@Sim2017].
-We implement two additions to existing minhash schemes: depth tracking of the minhashes and filtering based upon these depths.
-Depth tracking allows either rough heuristics on either isolate purity or metagenome complexity.
+MinHash [@Broder1997] is a document similarity estimation technique that has been applied to problems in genomics including sequence search, phylogenetic reconstruction [@Ondov2016; @Brown2016], and evaluating outbreaks of hospital acquired infections (HAIs) [@Sim2017].
+We implement two additions to existing MinHash schemes: calculating abundances (i.e., minmer counts) during the generation of the MinHash sketches and adaptively correcting for biases introduced due to variable sequencing depth. 
+This count information greatly improves the utility of MinHashing when working directly from raw read data (i.e., FASTQ files) and allows more robust estimation of distances between both isolates and complex metagenomic samples. 
 
-finch contains a Rust library and a command line tool for creating and manipulating MinHash sketches.
+`finch-rs` is a Rust library and a corresponding command line tool, `finch`, for creating and manipulating MinHash sketches with abundance information.
 
 # References
