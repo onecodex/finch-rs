@@ -5,15 +5,15 @@ tags:
   - Rust
 authors:
  - name: Roderick Bovee
-   orcid: FIXME
+   orcid: 0000-0002-8819-9549
    affiliation: 1
  - name: Nick Greenfield
-   orcid: FIXME
+   orcid: 0000-0001-8637-406X
    affiliation: 1
 affiliations:
  - name: One Codex
    index: 1
-date: 23 March 2017
+date: 24 August 2017
 bibliography: paper.bib
 ---
 # Summary

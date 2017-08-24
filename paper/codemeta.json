@@ -1,0 +1,30 @@
+{
+  "@context": "https://raw.githubusercontent.com/codemeta/codemeta/master/codemeta.jsonld",
+  "@type": "Code",
+  "author": [
+    {
+      "@id": "0000-0002-8819-9549",
+      "@type": "Person",
+      "email": "roderick@onecodex.com",
+      "name": "Roderick Bovee",
+      "affiliation": "One Codex"
+    },
+    {
+      "@id": "0000-0001-8637-406X",
+      "@type": "Person",
+      "email": "nick@onecodex.com",
+      "name": "Nick Greenfield",
+      "affiliation": "One Codex"
+    }
+  ],
+  "identifier": "",
+  "codeRepository": "https://github.com/onecodex/finch-rs/",
+  "datePublished": "2017-08-24",
+  "dateModified": "2017-08-24",
+  "dateCreated": "2017-08-24",
+  "description": "A genomic minhashing implementation in Rust",
+  "keywords": "bioinformatics, minhash, rust",
+  "license": "MIT",
+  "title": "finch",
+  "version": "v0.1.2"
+}
