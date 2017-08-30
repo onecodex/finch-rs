@@ -68,7 +68,7 @@ impl Hasher for NoHashHasher {
 }
 
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Hash, Serialize)]
 pub struct KmerCount {
     pub hash: ItemHash,
     pub kmer: Vec<u8>,
