@@ -6,6 +6,7 @@ use statistics::hist;
 
 
 /// Used to pass around filter options for sketching
+#[derive(Debug)]
 pub struct FilterParams {
     pub filter_on: Option<bool>,
     pub abun_filter: (Option<u16>, Option<u16>),

@@ -6,7 +6,7 @@ use minhashes::{KmerCount, hash_f};
 
 
 #[allow(non_snake_case)]
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SketchDistance {
     pub containment: f64,
     pub jaccard: f64,
@@ -18,7 +18,7 @@ pub struct SketchDistance {
 }
 
 #[allow(non_snake_case)]
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct JSONMultiSketch {
     pub kmer: u8,
     pub alphabet: String,
@@ -32,7 +32,7 @@ pub struct JSONMultiSketch {
 }
 
 #[allow(non_snake_case)]
-#[derive(Deserialize, Eq, PartialEq, Clone, Serialize)]
+#[derive(Debug, Deserialize, Eq, PartialEq, Clone, Serialize)]
 pub struct JSONSketch {
     pub name: String,
     pub seqLength: Option<u64>,
