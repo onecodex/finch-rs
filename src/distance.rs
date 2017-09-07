@@ -3,9 +3,11 @@ use serialization::SketchDistance;
 
 
 pub fn distance(sketch1: &[KmerCount], sketch2: &[KmerCount], sketch1_name: &str, sketch2_name: &str, mash_mode: bool) -> Result<SketchDistance, &'static str> {
-    if sketch1[0].kmer.len() != sketch2[0].kmer.len() {
-        return Err("Sketches have different sized kmers");
-    }
+    // // TODO: in principle this is a good check, but sometimes one of the kmers will be "" if
+    // // serialized without and that break this
+    // if sketch1[0].kmer.len() != sketch2[0].kmer.len() {
+    //     return Err("Sketches have different sized kmers");
+    // }
     let distances;
     if mash_mode {
         distances = raw_mash_distance(sketch1, sketch2);
