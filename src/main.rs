@@ -291,7 +291,7 @@ fn run() -> Result<(), String> {
                                 b'G' | b'g' | b'C' | b'c' => kmer.count as u64,
                                 _ => 0,
                             }
-                        }).sum();
+                        }).sum::<u64>();
                     }
                     let total_bases = mean.0 * kmers[0].kmer.len() as f32;
                     println!("  Estimated % GC: {}%", 100f32 * total_gc as f32 / total_bases);
