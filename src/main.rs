@@ -5,6 +5,7 @@ extern crate serde_json;
 use std::fs::File;
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
+use std::process::exit;
 
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 
@@ -115,6 +116,7 @@ fn main() {
     if let Err(e) = run() {
         let mut stderr = std::io::stderr();
         writeln!(&mut stderr, "Error: {}", e).unwrap();
+        exit(1);
     }
 }
 
