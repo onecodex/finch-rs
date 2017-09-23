@@ -36,6 +36,7 @@ pub struct JSONMultiSketch {
 pub struct JSONSketch {
     pub name: String,
     pub seqLength: Option<u64>,
+    pub numValidKmers: Option<u64>,
     pub comment: Option<String>,
     pub filters: Option<HashMap<String, String>>,
     hashes: Vec<String>,
@@ -44,7 +45,7 @@ pub struct JSONSketch {
 }
 
 impl JSONSketch {
-    pub fn new(name: &str, length: u64, kmercounts: Vec<KmerCount>, filters: &HashMap<String, String>) -> Self {
+    pub fn new(name: &str, length: u64, n_kmers: u64, kmercounts: Vec<KmerCount>, filters: &HashMap<String, String>) -> Self {
         let mut hash_list = Vec::with_capacity(kmercounts.len());
         let mut kmer_list = Vec::with_capacity(kmercounts.len());
         let mut count_list = Vec::with_capacity(kmercounts.len());
@@ -56,6 +57,7 @@ impl JSONSketch {
         JSONSketch {
             name: String::from(name),
             seqLength: Some(length),
+            numValidKmers: Some(n_kmers),
             comment: Some(String::from("")),
             filters: Some(filters.clone()),
             hashes: hash_list,

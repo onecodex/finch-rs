@@ -21,6 +21,7 @@ pub fn mash_files(filenames: Vec<&str>, n_hashes: usize, final_size: usize, kmer
     let mut sketches = Vec::with_capacity(filenames.len());
     for filename in &filenames {
         let mut seq_len = 0u64;
+        let mut n_kmers = 0u64;
         let path = Path::new(filename);
         let mut minhash = match filters.filter_on {
             Some(true) | None => MinHashKmers::new(n_hashes, seed),
@@ -42,6 +43,7 @@ pub fn mash_files(filenames: Vec<&str>, n_hashes: usize, final_size: usize, kmer
                     true => 1u8,
                     false => 0u8,
                 };
+                n_kmers += 1;
                 minhash.push(kmer, rc_count);
             }
         }).map_err(|e| e.to_string())?;
@@ -55,7 +57,8 @@ pub fn mash_files(filenames: Vec<&str>, n_hashes: usize, final_size: usize, kmer
 
         // directory should be clipped from filename
         let basename = path.file_name().ok_or("Couldn't get filename from path")?;
-        let sketch = JSONSketch::new(basename.to_str().ok_or("Couldn't make filename into string")?, seq_len, filtered_hashes, &filter_stats);
+        let sketch = JSONSketch::new(basename.to_str().ok_or("Couldn't make filename into string")?,
+                                     seq_len, n_kmers, filtered_hashes, &filter_stats);
         sketches.push(sketch);
     }
     Ok(JSONMultiSketch {
