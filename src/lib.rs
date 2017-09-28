@@ -4,8 +4,9 @@ extern crate serde;
 #[macro_use] extern crate serde_derive;
 extern crate serde_json;
 
+use std::io::{Read, Seek};
 use std::path::Path;
-use needletail::fastx::fastx_cli;
+use needletail::fastx::{fastx_cli, fastx_stream};
 
 use filtering::{FilterParams, filter_sketch};
 use minhashes::MinHashKmers;
@@ -72,4 +73,46 @@ pub fn mash_files(filenames: Vec<&str>, n_hashes: usize, final_size: usize, kmer
         hashSeed: seed,
         sketches: sketches,
     })
+}
+
+
+pub fn mash_stream<R>(reader: R, n_hashes: usize, final_size: usize, kmer_length: u8,
+                      filters: &mut FilterParams, no_strict: bool, seed: u64) -> Result<JSONSketch, String> where
+    R: Read + Seek,
+{
+        let mut seq_len = 0u64;
+        let mut n_kmers = 0u64;
+        let mut minhash = match filters.filter_on {
+            Some(true) | None => MinHashKmers::new(n_hashes, seed),
+            Some(false) => MinHashKmers::new(final_size, seed),
+        };
+        fastx_stream(reader, |seq_type| {
+            // disable filtering for FASTA files unless it was explicitly specified
+            if let None = filters.filter_on {
+                filters.filter_on = match seq_type {
+                    "FASTA" => Some(false),
+                    "FASTQ" => Some(true),
+                    _ => panic!("Unknown sequence type"),
+                };
+            }
+        }, |seq| {
+            seq_len += seq.seq.len() as u64;
+            for (_, kmer, is_rev_complement) in seq.normalize(false).kmers(kmer_length, true) {
+                let rc_count = match is_rev_complement {
+                    true => 1u8,
+                    false => 0u8,
+                };
+                n_kmers += 1;
+                minhash.push(kmer, rc_count);
+            }
+        }).map_err(|e| e.to_string())?;
+
+        let hashes = minhash.into_vec();
+        let (mut filtered_hashes, filter_stats) = filter_sketch(&hashes, &filters);
+        filtered_hashes.truncate(final_size);
+        if !no_strict && filtered_hashes.len() < final_size {
+            return Err(format!("Stream had too few kmers ({}) to sketch", filtered_hashes.len()));
+        }
+
+        Ok(JSONSketch::new("", seq_len, n_kmers, filtered_hashes, &filter_stats))
 }
