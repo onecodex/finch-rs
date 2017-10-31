@@ -20,16 +20,21 @@ pub fn filter_sketch(hashes: &[KmerCount], filters: &FilterParams) -> (Vec<KmerC
     let mut filter_stats: HashMap<String, String> = HashMap::new();
 
     let mut low_abun_filter = filters.abun_filter.0;
+    let mut filtered_hashes = hashes.to_vec();
+
+    if filter_on && filters.strand_filter > 0f32 {
+        filtered_hashes = filter_strands(&filtered_hashes, filters.strand_filter);
+        filter_stats.insert(String::from("strandFilter"), filters.strand_filter.to_string());
+    }
 
     if filter_on && filters.err_filter > 0f32 {
-        let cutoff = guess_filter_threshold(&hashes, filters.err_filter);
+        let cutoff = guess_filter_threshold(&filtered_hashes, filters.err_filter);
         if let None = low_abun_filter {
             low_abun_filter = Some(cutoff);
             filter_stats.insert(String::from("errFilter"), filters.err_filter.to_string());
         }
     }
 
-    let mut filtered_hashes = hashes.to_vec();
     if filter_on && (low_abun_filter != None || filters.abun_filter.1 != None) {
         filtered_hashes = filter_abundance(&filtered_hashes, low_abun_filter, filters.abun_filter.1);
         if let Some(v) = low_abun_filter {
@@ -38,11 +43,6 @@ pub fn filter_sketch(hashes: &[KmerCount], filters: &FilterParams) -> (Vec<KmerC
         if let Some(v) = filters.abun_filter.1 {
             filter_stats.insert(String::from("maxCopies"), v.to_string());
         }
-    }
-
-    if filter_on && filters.strand_filter > 0f32 {
-        filtered_hashes = filter_strands(&filtered_hashes, filters.strand_filter);
-        filter_stats.insert(String::from("strandFilter"), filters.strand_filter.to_string());
     }
 
     (filtered_hashes, filter_stats)
