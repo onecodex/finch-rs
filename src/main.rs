@@ -32,8 +32,10 @@ macro_rules! add_output_options {
     };
 }
 
+// got a little macro-happy here; this could maybe just be a function
+// and we could be smarter about how we pass borrows in here?
 macro_rules! output_to {
-    ($object: ident, $matches: ident) => {
+    ($object: ident, $matches: ident, $default_ext: expr) => {
         let output = $matches.value_of("output_file");
         match output {
             None => {
@@ -42,8 +44,17 @@ macro_rules! output_to {
                 })?;
                 println!("{}", text);
             },
-            Some(out_filename) => {
-                let mut out = File::create(out_filename).map_err(|_| {
+            Some(o) => {
+                // if the filename doesn't have the right extension
+                // add it on
+                let filename = String::from(o);
+                let out_filename = if filename.ends_with($default_ext) {
+                    filename
+                } else {
+                    filename + $default_ext
+                };
+
+                let mut out = File::create(&out_filename).map_err(|_| {
                     format!("Could not create {}", out_filename)
                 })?;
                 let _ = out.write_all(&serde_json::to_vec(&$object).map_err(|_| {
@@ -193,7 +204,7 @@ fn run() -> Result<(), String> {
     if let Some(matches) = matches.subcommand_matches("sketch") {
         if matches.is_present("output_file") || matches.is_present("std_out") {
             let sketches = parse_all_mash_files(matches)?;
-            output_to!(sketches, matches);
+            output_to!(sketches, matches, FINCH_EXT);
         } else {
             // "sketch in place"
             parse_mash_files(matches, |multisketch, filename| {
@@ -222,7 +233,7 @@ fn run() -> Result<(), String> {
             let all_sketches = parse_all_mash_files(matches)?;
             distances.extend(calc_sketch_distances(&all_sketches.sketches, &all_sketches.sketches, mash_mode, max_dist));
 
-            output_to!(distances, matches);
+            output_to!(distances, matches, ".json");
             return Ok(());
         }
 
@@ -256,7 +267,7 @@ fn run() -> Result<(), String> {
             let sketches = open_mash_file(filename, matches, Some(&first_sketch))?;
             distances.extend(calc_sketch_distances(&query_sketches, &sketches.sketches, mash_mode, max_dist));
         }
-        output_to!(distances, matches);
+        output_to!(distances, matches, ".json");
     } else if let Some(matches) = matches.subcommand_matches("hist") {
         let mut hist_map: HashMap<String, Vec<u64>> = HashMap::new();
         parse_mash_files(matches, |multisketch, _| {
@@ -265,7 +276,7 @@ fn run() -> Result<(), String> {
             }
         })?;
 
-        output_to!(hist_map, matches);
+        output_to!(hist_map, matches, ".json");
     } else if let Some(matches) = matches.subcommand_matches("info") {
         parse_mash_files(matches, |multisketch, _| {
             for sketch in multisketch.sketches.iter() {
