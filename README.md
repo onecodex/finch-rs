@@ -119,3 +119,9 @@ We've sketched the NCBI RefSeq collection (as of March 27, 2017 using [this scri
 There are several other implementations of the Mash algorithm which should be compatible/comparable with this one, notably:
  - [Mash](https://github.com/marbl/Mash) - First implementation and theoretical paper
  - [SourMash](https://github.com/dib-lab/sourmash) - Newer implementation in Python; provides a number of experimental features
+
+## Contributions ##
+
+Problems or suggestions for improvement can be reported through GitHub issues.
+We are happy to accept and/or mentor any additions or fixes (which are best submitted as pull requests).
+For our code of conduct, please see `CODE_OF_CONDUCT.md`.
