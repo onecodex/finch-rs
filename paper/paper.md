@@ -11,7 +11,7 @@ authors:
    orcid: 0000-0001-8637-406X
    affiliation: 1
 affiliations:
- - name: One Codex
+ - name: One Codex, San Francisco, California, USA
    index: 1
 date: 24 August 2017
 bibliography: paper.bib
