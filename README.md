@@ -5,9 +5,39 @@
 Finch is an implementation of min-wise independent permutation locality sensitive hashing ("MinHashing") for genomic data.
 This repository provides a library and command-line interface that reimplements much of One Codex's [existing internal clustering/sequence search tool](http://blog.onecodex.com/2016/02/11/clustering-and-basespace/) (and adds new features/extensions!) in [Rust](https://www.rust-lang.org/en-US/).
 
-**Installation:** You may build Finch from source using Rust >= `1.15`, install via `cargo install finch` if you have Rust's Cargo package manager, or [download a prebuilt binary](https://github.com/onecodex/finch-rs/releases).
+## Getting Started ##
 
-## Design goals
+### Installation ###
+You may build Finch from source using Rust >= `1.15`, install via `cargo install finch` if you have Rust's Cargo package manager (see [rustup](https://www.rustup.rs) for fast Cargo installation instructions), or [download a prebuilt binary](https://github.com/onecodex/finch-rs/releases).
+
+### Example Usage ###
+Sketching sequencing files is the first step in most Mash pipelines:
+```
+finch sketch example.fastq example2.fastq
+```
+These sketches can be then be used with other Mash implementations (although see [this issue tracking interoperability](https://github.com/marbl/Mash/issues/27) and note other implementations may use a different seed value).
+All of Finch's commands can take either sketches or raw sequence files which they'll sketch on the fly so presketching sequencing files may not be necessary unless lots of downstream analyses are being performed.
+
+Once sketched, multiple sequencing runs can be compared to determine how similar they are:
+```
+finch dist example.fastq.sk example2.fastq.sk
+```
+This will print a JSON object with some statistics including how much of the second file is found in the first file (`containment`) and how similar they are (`jaccard` index and `mashDistance`):
+```
+[{"containment":0.0,"jaccard":0.0,"mashDistance":1.0,"commonHashes":0,"totalHashes":1000,"query":"example2.fastq","reference":"example.fastq"}]
+```
+In this case, these files have nothing in common at the depth we're looking at!
+Resketching with a higher `--n-hashes` parameter may allow comparions of more dissimilar sequencing data like these.
+
+Finding the most similar relatives of one of these files in a RefSeq database may be helpful too (see *Example Data* below for links to pre-sketched RefSeq databases):
+```
+finch dist -q example.fastq -d 0.2 ./refseq_sketches_21_1000.sk ./example.fastq
+```
+A maximum distance of 0.2 is set here to filter out unrelated genomes (a distance of 0 would be an identical genome); setting a maximum is a good idea otherwise distances to *all* of RefSeq are returned.
+
+**Note**: _More details on all of these commands and their parameters can be obtained with, e.g. `finch dist --help`._
+
+## Design goals ##
 We have 3 primary design goals with Finch:
 
 1. Support for tracking k-mer/minmer _counts_;
@@ -17,14 +47,14 @@ We have 3 primary design goals with Finch:
 3. Improved performance.
 
 
-### Support for counts
+### Support for counts ###
 Finch is one of the first MinHash implementations to support tracking the abundances of each unique _k_-mer/minmer.
 This allows useful quick interpretations of data (e.g. visualizing sequencing depth with `finch hist`) in addition to laying the support for more advanced filtering (implemented here) and count-aware distance measures (a future area for investigation and study).
 Because Finch also supports the [new Mash JSON compatibility format](https://github.com/marbl/Mash/blob/master/src/mash/schema-1.0.0.json), we're able to save this count information for downstream processing and comparisons.
 
  > :warning: &nbsp;Note that although Finch supports the common JSON interchange format, there may still be incompatibilites due to incompaible hashing seed values (Finch uses a seed of `0`, while Mash uses `42`; see [this issue](https://github.com/marbl/Mash/issues/12) for more discussion).
 
-### Filtering
+### Filtering ###
 A key design goal for Finch was the ability to accurately – and _stably_ – sketch variable depth sequencing of bacterial isolates (i.e., to not require a high quality assembly). While Mash includes the ability to specify a fixed absolute cutoff (or use a Bloom filter to filter out unique minmers in a sample), in practice this filtering mechanism performs poorly across varied sequencing depths, genome sizes, and sequencing error profiles. The Finch filtering approach implemented here extends several of the ideas in the original Mash paper, as well as [prior work on clustering clinical _C. diff_ isolates](http://www.dmidjournal.com/article/S0732-8893(16)30322-4/abstract).
 
 Finch includes two classes of automated filtering (on by default for FASTQs) to address this challenge:
@@ -39,7 +69,7 @@ In practice, these optimizations dramatically increase the stability and accurac
 
 Notably, this strategy performs well across sequencing depths, while fixed cutoffs of 0 and 1 never achieve the near-100% expected containment (and the former fails catastrophically at even modest depths). It is also robust to repeated errors (i.e., error _k_-mers/minmers with a count >= 2), which can begin to pose a problem at sequencing depths as low a 10-20X.
 
-### Speed/performance
+### Speed/performance ###
 In addition to some of the memory safety guarentees that Rust enables, we also see considerable speed gains over existing implementations.
 Ideally, hashing should be the rate-limiting step in MinHashing. Profiling indicates `finch` spends about a third of its time in `murmurhash3_x64_128` so we should be within an order of magnitude of this theoretical limit.
 
