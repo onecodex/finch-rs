@@ -4,7 +4,8 @@ extern crate serde_json;
 
 use std::fs::File;
 use std::collections::{HashMap, HashSet};
-use std::io::Write;
+use std::io::{BufReader, Write};
+
 use std::process::exit;
 
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
@@ -227,46 +228,31 @@ fn run() -> Result<(), String> {
             Err(format!("max-distance must be 0 and 1"))
         })?;
 
-        // some special logic if we're doing a pairwise comparison
-        if matches.is_present("pairwise") {
-            let mut distances = Vec::new();
-            let all_sketches = parse_all_mash_files(matches)?;
-            distances.extend(calc_sketch_distances(&all_sketches.sketches, &all_sketches.sketches, mash_mode, max_dist));
+        let all_sketches = parse_all_mash_files(matches)?;
 
-            output_to!(distances, matches, ".json");
-            return Ok(());
-        }
-
-        let filenames: Vec<_> = matches.values_of("INPUT").ok_or("Bad INPUT")?.collect();
-        let mut filename_iter = filenames.iter();
-        let filename = filename_iter.next().ok_or("At least one filename must be specified")?;
-
-        let first_sketch = open_mash_file(filename, matches, None)?;
-
-        // find the query sketches in the first file
         let mut query_sketches = Vec::new();
-        if matches.is_present("queries") {
+        if matches.is_present("pairwise") {
+            for sketch in &all_sketches.sketches {
+                query_sketches.push(sketch);
+            }
+        } else if matches.is_present("queries") {
             let query_names: HashSet<String> = matches.values_of("queries").ok_or("Bad queries")?.map(|s| {
                 s.to_string()
             }).collect();
 
-            for sketch in first_sketch.sketches.iter() {
+            for sketch in all_sketches.sketches.iter() {
                 if query_names.contains(&sketch.name) {
-                    query_sketches.push(sketch.clone());
+                    query_sketches.push(sketch);
                 }
             }
         } else {
-            if first_sketch.sketches.len() < 1 {
-                return Err(String::from("No sketches in first file!"));
+            if all_sketches.sketches.len() < 1 {
+                return Err(String::from("No sketches present!"));
             }
-            query_sketches.push(first_sketch.sketches[0].clone());
+            query_sketches.push(all_sketches.sketches.last().unwrap());
         }
 
-        let mut distances = calc_sketch_distances(&query_sketches, &first_sketch.sketches, mash_mode, max_dist);
-        for filename in filename_iter {
-            let sketches = open_mash_file(filename, matches, Some(&first_sketch))?;
-            distances.extend(calc_sketch_distances(&query_sketches, &sketches.sketches, mash_mode, max_dist));
-        }
+        let mut distances = calc_sketch_distances(&query_sketches, &all_sketches.sketches, mash_mode, max_dist);
         output_to!(distances, matches, ".json");
     } else if let Some(matches) = matches.subcommand_matches("hist") {
         let mut hist_map: HashMap<String, Vec<u64>> = HashMap::new();
@@ -293,7 +279,7 @@ fn run() -> Result<(), String> {
 
                     let histogram = hist(&kmers);
                     let mean = histogram.iter().enumerate()
-                        .map(|(i, v)| (i as f32 * *v as f32, *v as f32))
+                        .map(|(i, v)| ((i as f32 + 1f32) * *v as f32, *v as f32))
                         .fold((0f32, 0f32), |e, s| (e.0 + s.0, e.1 + s.1));
                     println!("  Estimated Average Depth: {}x", mean.0 / mean.1);
 
@@ -343,12 +329,12 @@ fn parse_mash_files<P>(matches: &ArgMatches, ref mut parser: P) -> Result<(), St
     Ok(())
 }
 
-fn calc_sketch_distances(ref_sketches: &[JSONSketch], query_sketches: &[JSONSketch], mash_mode: bool, max_distance: f64) -> Vec<SketchDistance> {
+fn calc_sketch_distances(query_sketches: &[&JSONSketch], ref_sketches: &[JSONSketch], mash_mode: bool, max_distance: f64) -> Vec<SketchDistance> {
     let mut distances = Vec::new();
     for ref_sketch in ref_sketches.iter() {
         let rsketch = &ref_sketch.get_kmers().unwrap();
         for query_sketch in query_sketches.iter() {
-            if query_sketch == ref_sketch {
+            if query_sketch == &ref_sketch {
                 continue;
             }
             let qsketch = &query_sketch.get_kmers().unwrap();
@@ -431,7 +417,8 @@ fn open_mash_file(filename: &str, matches: &ArgMatches, default_sketch: Option<&
     let file = File::open(filename).map_err(|_|
         format!("Error opening {}", &filename)
     )?;
-    let mut json: JSONMultiSketch = serde_json::from_reader(file).map_err(|_|
+    let buf_reader = BufReader::new(file);
+    let mut json: JSONMultiSketch = serde_json::from_reader(buf_reader).map_err(|_|
         format!("Error parsing {}", &filename)
     )?;
 

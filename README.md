@@ -91,7 +91,7 @@ Sketches should be compatible with the original Mash implementation if you edit 
 `finch dist` will calculate Jaccard distances between different sketches.
 If the files listed are FASTA/Q instead of sketches, Finch will automatically sketch them into memory using the same command-line parameters as in `sketch` or, for files after the first, the parameters used to sketch the first file.
 
-Distances and containments will only be computed from one or more queries to a collection of references; by default the first sketch in the list will be used as the query and all other sketches will be used as references.
+Distances and containments will only be computed from one or more queries to a collection of references; by default the last sketch in the list will be used as the query and all other sketches will be used as references.
 This behavior can be manually overriden and other sketches can be used as references by passing `--queries <sketch_1>,<sketch_2`.
 Additionally, passing the `--pairwise` option will calculate the distances between all sketches and each other.
 
