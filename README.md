@@ -8,34 +8,52 @@ This repository provides a library and command-line interface that reimplements 
 ## Getting Started ##
 
 ### Installation ###
-You may build Finch from source using Rust >= `1.15`, install via `cargo install finch` if you have Rust's Cargo package manager (see [rustup](https://www.rustup.rs) for fast Cargo installation instructions), or [download a prebuilt binary](https://github.com/onecodex/finch-rs/releases).
+You may build Finch from source using Rust >= `1.15`, install with `cargo install finch` if you have Rust's Cargo package manager (see [rustup](https://www.rustup.rs) for fast Cargo installation instructions), or [download a prebuilt binary](https://github.com/onecodex/finch-rs/releases).
 
 ### Example Usage ###
-Sketching sequencing files is the first step in most Mash pipelines:
+To get started, we first compute sketches for several FASTA or FASTQ files. These sketches are compact, sampled representations of the underlying genomic data, and what allow `finch` to rapidly estimate distances between datasets. Sketching files uses the `finch sketch` command:
+
 ```
 finch sketch example.fastq example2.fastq
 ```
-These sketches can be then be used with other Mash implementations (although see [this issue tracking interoperability](https://github.com/marbl/Mash/issues/27) and note other implementations may use a different seed value).
-All of Finch's commands can take either sketches or raw sequence files which they'll sketch on the fly so presketching sequencing files may not be necessary unless lots of downstream analyses are being performed.
+
+The resulting sketch files (`example.fastq.sk` and `example2.fastq.sk`) can then be used with other `finch` commands (as well as with other MinHash implementations<sup>1</sup>). Note that all of Finch's commands can take either sketches or raw sequence files. If passed the latter, `finch` will sketch the files on the fly. Sketches generated on the fly are **not saved**, however, so you should call `finch sketch` if you plan to use the sketch multiple times.
 
 Once sketched, multiple sequencing runs can be compared to determine how similar they are:
+
 ```
 finch dist example.fastq.sk example2.fastq.sk
 ```
-This will print a JSON object with some statistics including how much of the second file is found in the first file (`containment`) and how similar they are (`jaccard` index and `mashDistance`):
-```
-[{"containment":0.0,"jaccard":0.0,"mashDistance":1.0,"commonHashes":0,"totalHashes":1000,"query":"example2.fastq","reference":"example.fastq"}]
-```
-In this case, these files have nothing in common at the depth we're looking at!
-Resketching with a higher `--n-hashes` parameter may allow comparions of more dissimilar sequencing data like these.
 
-Finding the most similar relatives of one of these files in a RefSeq database may be helpful too (see *Example Data* below for links to pre-sketched RefSeq databases):
-```
-finch dist -q example.fastq -d 0.2 ./refseq_sketches_21_1000.sk ./example.fastq
-```
-A maximum distance of 0.2 is set here to filter out unrelated genomes (a distance of 0 would be an identical genome); setting a maximum is a good idea otherwise distances to *all* of RefSeq are returned.
+This will print results (in JSON) with some key distance statistics, including `containment` and `jaccard` similarity scores and a `mashDistance` distance estimate:
 
-**Note**: _More details on all of these commands and their parameters can be obtained with, e.g. `finch dist --help`._
+
+```json
+[
+  {
+    "commonHashes": 30,
+    "containment": 0.03,
+    "jaccard": 0.015228426395939087,
+    "mashDistance": 0.1669789474914277,
+    "query": "example2.fastq",
+    "reference": "example1.fastq",
+    "totalHashes": 1000
+  }
+]
+```
+
+In this case, these files have an estimated distance of ~0.17 and a containment of 0.03 (i.e., the two FASTQs share 3% of their min-mers). Note that re-computing the sketches with a larger `--n-hashes` parameter can provide additional resolution for highly similar datasets.
+
+
+Next, we may want to find the nearest genomes to our example FASTQ **across all of RefSeq**. To do this, we simple pass a sketch containing all the genomes in RefSeq as the first argument, and our example file as the second (see the Example Data section for pre-computed RefSeq databases that work with `finch`):
+
+```
+finch dist ./refseq_sketches_21_1000.sk ./example.fastq.sk --max-dist 0.2
+```
+
+Here, we also set a maximum distance of 0.2 in order to filter out less closely related genomes (a distance of 0 would be an identical genome). Setting a maximum ensures that the only relevant results are returned -- omitting this parameter would return distances to *all* of the genomes in RefSeq.
+
+_**Note**: Each of these commands is detailed further below, and more information is also available by passing the `--help` flag to each command, e.g., `finch dist --help`._
 
 ## Design goals ##
 We have 3 primary design goals with Finch:
@@ -144,11 +162,14 @@ The histogram is a list of the number of minmers at each depth, e.g. `{"sketch_n
 ## Example Data ##
 We've sketched the NCBI RefSeq collection (as of March 27, 2017 using [this script](https://github.com/DerrickWood/kraken/blob/master/scripts/download_genomic_library.sh)) and made tarballs with individual sketches for each bacterial and viral genome available. Links: [_k=21_ and _n=1,000_](https://static.onecodex.com/public/finch-rs/refseq_sketches_21_1000.sk.gz), [_k=31_ and _n=1,000_](https://static.onecodex.com/public/finch-rs/refseq_sketches_31_1000.sk.gz), [_k=21_ and _n=10,000_](https://static.onecodex.com/public/finch-rs/refseq_sketches_21_10000.sk.gz), and [_k=31_ and _n=10,000_](https://static.onecodex.com/public/finch-rs/refseq_sketches_31_10000.sk.gz).
 
-## References ##
+## References & Notes ##
 
 There are several other implementations of the Mash algorithm which should be compatible/comparable with this one, notably:
  - [Mash](https://github.com/marbl/Mash) - First implementation and theoretical paper
  - [SourMash](https://github.com/dib-lab/sourmash) - Newer implementation in Python; provides a number of experimental features
+
+Notes:
+- <sup>1</sup> Please see, however, [this issue tracking interoperability](https://github.com/marbl/Mash/issues/27) and note that other implementations may use a different seed value.
 
 ## Contributions ##
 
