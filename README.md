@@ -1,6 +1,7 @@
 # Finch #
 
 [![CircleCI](https://circleci.com/gh/onecodex/finch-rs.svg?style=shield&circle-token=4fa4296a595f0d0e8dfcea750d76c39576f2df73)](https://circleci.com/gh/onecodex/finch-rs)
+[![DOI](http://joss.theoj.org/papers/10.21105/joss.00505/status.svg)](https://doi.org/10.21105/joss.00505)
 
 Finch is an implementation of min-wise independent permutation locality sensitive hashing ("MinHashing") for genomic data.
 This repository provides a library and command-line interface that reimplements much of One Codex's [existing internal clustering/sequence search tool](http://blog.onecodex.com/2016/02/11/clustering-and-basespace/) (and adds new features/extensions!) in [Rust](https://www.rust-lang.org/en-US/).
