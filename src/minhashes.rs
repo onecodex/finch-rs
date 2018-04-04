@@ -15,7 +15,7 @@ pub fn hash_f(item: &[u8], seed: u64) -> ItemHash {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct HashedItem<T> {
     hash: ItemHash,
     item: T,
@@ -77,6 +77,7 @@ pub struct KmerCount {
 }
 
 
+#[derive(Clone)]
 pub struct MinHashKmers {
     hashes: BinaryHeap<HashedItem<Vec<u8>>>,
     counts: HashMap<ItemHash, (u16, u16), BuildHasherDefault<NoHashHasher>>,
@@ -134,6 +135,10 @@ impl MinHashKmers {
                 // drop(_map_lock);
             }
         }
+    }
+
+    pub fn total_kmers(&self) -> usize {
+        self.total_count as usize
     }
 
     pub fn into_vec(self) -> Vec<KmerCount> {
