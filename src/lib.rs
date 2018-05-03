@@ -1,3 +1,4 @@
+#[macro_use] extern crate failure;
 extern crate needletail;
 extern crate murmurhash3;
 extern crate serde;
@@ -6,6 +7,8 @@ extern crate serde_json;
 
 use std::io::{Read, Seek};
 use std::path::Path;
+use std::result::Result as StdResult;
+use failure::Error;
 use needletail::fastx::{fastx_cli, fastx_stream};
 
 use filtering::{FilterParams, filter_sketch};
@@ -18,7 +21,9 @@ pub mod distance;
 pub mod serialization;
 pub mod statistics;
 
-pub fn mash_files(filenames: Vec<&str>, n_hashes: usize, final_size: usize, kmer_length: u8, filters: &mut FilterParams, no_strict: bool, seed: u64) -> Result<JSONMultiSketch, String> {
+pub type Result<T> = StdResult<T, Error>;
+
+pub fn mash_files(filenames: Vec<&str>, n_hashes: usize, final_size: usize, kmer_length: u8, filters: &mut FilterParams, no_strict: bool, seed: u64) -> Result<JSONMultiSketch> {
     let mut sketches = Vec::with_capacity(filenames.len());
     for filename in &filenames {
         let mut seq_len = 0u64;
@@ -28,7 +33,7 @@ pub fn mash_files(filenames: Vec<&str>, n_hashes: usize, final_size: usize, kmer
             Some(true) | None => MinHashKmers::new(n_hashes, seed),
             Some(false) => MinHashKmers::new(final_size, seed),
         };
-        fastx_cli(path.to_str().ok_or("Couldn't make path into string")?, |seq_type| {
+        fastx_cli(path.to_str().ok_or(format_err!("Couldn't make path into string"))?, |seq_type| {
             // disable filtering for FASTA files unless it was explicitly specified
             if let None = filters.filter_on {
                 filters.filter_on = match seq_type {
@@ -47,18 +52,18 @@ pub fn mash_files(filenames: Vec<&str>, n_hashes: usize, final_size: usize, kmer
                 n_kmers += 1;
                 minhash.push(kmer, rc_count);
             }
-        }).map_err(|e| e.to_string())?;
+        }).map_err(|e| format_err!("{}", e.to_string()))?;
 
         let hashes = minhash.into_vec();
         let (mut filtered_hashes, filter_stats) = filter_sketch(&hashes, &filters);
         filtered_hashes.truncate(final_size);
         if !no_strict && filtered_hashes.len() < final_size {
-            return Err(format!("{} had too few kmers ({}) to sketch", filename, filtered_hashes.len()));
+            bail!("{} had too few kmers ({}) to sketch", filename, filtered_hashes.len());
         }
 
         // directory should be clipped from filename
-        let basename = path.file_name().ok_or("Couldn't get filename from path")?;
-        let sketch = JSONSketch::new(basename.to_str().ok_or("Couldn't make filename into string")?,
+        let basename = path.file_name().ok_or(format_err!("Couldn't get filename from path"))?;
+        let sketch = JSONSketch::new(basename.to_str().ok_or(format_err!("Couldn't make filename into string"))?,
                                      seq_len, n_kmers, filtered_hashes, &filter_stats);
         sketches.push(sketch);
     }
@@ -77,7 +82,7 @@ pub fn mash_files(filenames: Vec<&str>, n_hashes: usize, final_size: usize, kmer
 
 
 pub fn mash_stream<R>(reader: R, n_hashes: usize, final_size: usize, kmer_length: u8,
-                      filters: &mut FilterParams, no_strict: bool, seed: u64) -> Result<JSONSketch, String> where
+                      filters: &mut FilterParams, no_strict: bool, seed: u64) -> Result<JSONSketch> where
     R: Read + Seek,
 {
         let mut seq_len = 0u64;
@@ -105,13 +110,13 @@ pub fn mash_stream<R>(reader: R, n_hashes: usize, final_size: usize, kmer_length
                 n_kmers += 1;
                 minhash.push(kmer, rc_count);
             }
-        }).map_err(|e| e.to_string())?;
+        }).map_err(|e| format_err!("{}", e.to_string()))?;
 
         let hashes = minhash.into_vec();
         let (mut filtered_hashes, filter_stats) = filter_sketch(&hashes, &filters);
         filtered_hashes.truncate(final_size);
         if !no_strict && filtered_hashes.len() < final_size {
-            return Err(format!("Stream had too few kmers ({}) to sketch", filtered_hashes.len()));
+            bail!("Stream had too few kmers ({}) to sketch", filtered_hashes.len());
         }
 
         Ok(JSONSketch::new("", seq_len, n_kmers, filtered_hashes, &filter_stats))

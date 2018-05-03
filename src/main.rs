@@ -1,16 +1,16 @@
 #[macro_use] extern crate clap;
+#[macro_use] extern crate failure;
 extern crate finch;
 extern crate serde_json;
 
 use std::fs::File;
 use std::collections::{HashMap, HashSet};
-use std::io::{BufReader, Write};
-
+use std::io::{stderr, BufReader, Write};
 use std::process::exit;
 
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 
-use finch::{mash_files};
+use finch::{mash_files, Result};
 use finch::distance::distance;
 use finch::filtering::{FilterParams};
 use finch::serialization::{JSONSketch, JSONMultiSketch, SketchDistance};
@@ -41,7 +41,7 @@ macro_rules! output_to {
         match output {
             None => {
                 let text = serde_json::to_string(&$object).map_err(|_| {
-                    "Could not serialize JSON to string".to_string()
+                    format_err!("Could not serialize JSON to string")
                 })?;
                 println!("{}", text);
             },
@@ -56,10 +56,10 @@ macro_rules! output_to {
                 };
 
                 let mut out = File::create(&out_filename).map_err(|_| {
-                    format!("Could not create {}", out_filename)
+                    format_err!("Could not create {}", out_filename)
                 })?;
                 let _ = out.write_all(&serde_json::to_vec(&$object).map_err(|_| {
-                    "Could not serialize JSON to bytes".to_string()
+                    format_err!("Could not serialize JSON to bytes")
                 })?);
             },
         };
@@ -125,14 +125,24 @@ macro_rules! add_kmer_options {
 
 
 fn main() {
-    if let Err(e) = run() {
-        let mut stderr = std::io::stderr();
-        writeln!(&mut stderr, "Error: {}", e).unwrap();
+    // see https://github.com/rust-lang-nursery/failure/issues/76
+    if let Err(err) = run() {
+        let mut serr = stderr();
+        let mut causes = err.causes();
+        writeln!(serr, "Error: {}", causes.next().expect("`causes` to at least contain `err`"))
+            .expect("unable to write error to stderr");
+        for cause in causes {
+            writeln!(serr, "Caused by: {}", cause)
+                .expect("unable to write error to stderr");
+        }
+        // The following assumes an `Error`, use `if let Some(backtrace) ...` for a `Fail`
+        writeln!(serr, "{:?}", err.backtrace())
+            .expect("unable to write error to stderr");
         exit(1);
     }
 }
 
-fn run() -> Result<(), String> {
+fn run() -> Result<()> {
     let mut sketch_command = SubCommand::with_name("sketch")
         .about("Create sketches from FASTA/Q file(s)")
         .arg(Arg::with_name("INPUT")
@@ -211,7 +221,7 @@ fn run() -> Result<(), String> {
             parse_mash_files(matches, |multisketch, filename| {
                 let out_filename = filename.to_string() + FINCH_EXT;
                 let mut out = File::create(&out_filename).map_err(|_| {
-                    format!("Could not open {}", out_filename)
+                    format_err!("Could not open {}", out_filename)
                 }).unwrap();
                 let _ = out.write_all(&serde_json::to_vec(&multisketch).unwrap());
             })?;
@@ -219,13 +229,13 @@ fn run() -> Result<(), String> {
     } else if let Some(matches) = matches.subcommand_matches("dist") {
         let mash_mode = matches.is_present("mash_mode");
 
-        let max_dist = matches.value_of("max_distance").ok_or("Bad max-distance")?.parse::<f64>().map_err(|_| {
-            format!("max-distance must be a number")
+        let max_dist = matches.value_of("max_distance").ok_or(format_err!("Bad max-distance"))?.parse::<f64>().map_err(|_| {
+            format_err!("max-distance must be a number")
         }).and_then(|r| {
             if 0f64 <= r && r <= 1f64 {
                 return Ok(r);
             }
-            Err(format!("max-distance must be 0 and 1"))
+            bail!("max-distance must be 0 and 1")
         })?;
 
         let all_sketches = parse_all_mash_files(matches)?;
@@ -236,7 +246,7 @@ fn run() -> Result<(), String> {
                 query_sketches.push(sketch);
             }
         } else if matches.is_present("queries") {
-            let query_names: HashSet<String> = matches.values_of("queries").ok_or("Bad queries")?.map(|s| {
+            let query_names: HashSet<String> = matches.values_of("queries").ok_or(format_err!("Bad queries"))?.map(|s| {
                 s.to_string()
             }).collect();
 
@@ -247,7 +257,7 @@ fn run() -> Result<(), String> {
             }
         } else {
             if all_sketches.sketches.len() < 1 {
-                return Err(String::from("No sketches present!"));
+                bail!("No sketches present!");
             }
             query_sketches.push(all_sketches.sketches.last().unwrap());
         }
@@ -302,10 +312,10 @@ fn run() -> Result<(), String> {
 }
 
 
-fn parse_all_mash_files(matches: &ArgMatches) -> Result<JSONMultiSketch, String> {
-    let filenames: Vec<_> = matches.values_of("INPUT").ok_or("Bad INPUT")?.collect();
+fn parse_all_mash_files(matches: &ArgMatches) -> Result<JSONMultiSketch> {
+    let filenames: Vec<_> = matches.values_of("INPUT").ok_or(format_err!("Bad INPUT"))?.collect();
     let mut filename_iter = filenames.iter();
-    let filename = filename_iter.next().ok_or("At least one filename must be specified")?;
+    let filename = filename_iter.next().ok_or(format_err!("At least one filename must be specified"))?;
 
     let mut sketches = open_mash_file(filename, matches, None)?;
     for filename in filename_iter {
@@ -315,10 +325,10 @@ fn parse_all_mash_files(matches: &ArgMatches) -> Result<JSONMultiSketch, String>
     Ok(sketches)
 }
 
-fn parse_mash_files<P>(matches: &ArgMatches, ref mut parser: P) -> Result<(), String> where P: FnMut(&JSONMultiSketch, &str) -> () {
-    let filenames: Vec<_> = matches.values_of("INPUT").ok_or("Bad INPUT")?.collect();
+fn parse_mash_files<P>(matches: &ArgMatches, ref mut parser: P) -> Result<()> where P: FnMut(&JSONMultiSketch, &str) -> () {
+    let filenames: Vec<_> = matches.values_of("INPUT").ok_or(format_err!("Bad INPUT"))?.collect();
     let mut filename_iter = filenames.iter();
-    let filename = filename_iter.next().ok_or("At least one filename must be specified")?;
+    let filename = filename_iter.next().ok_or(format_err!("At least one filename must be specified"))?;
 
     let first_sketch = open_mash_file(filename, matches, None)?;
     parser(&first_sketch, filename);
@@ -347,13 +357,13 @@ fn calc_sketch_distances(query_sketches: &[&JSONSketch], ref_sketches: &[JSONSke
     distances
 }
 
-fn open_mash_file(filename: &str, matches: &ArgMatches, default_sketch: Option<&JSONMultiSketch>) -> Result<JSONMultiSketch, String> {
-    let final_sketch_size = matches.value_of("n_hashes").ok_or("Bad n_hashes")?.parse::<usize>().map_err(|_| {
-        "n_hashes must be an integer"
+fn open_mash_file(filename: &str, matches: &ArgMatches, default_sketch: Option<&JSONMultiSketch>) -> Result<JSONMultiSketch> {
+    let final_sketch_size = matches.value_of("n_hashes").ok_or(format_err!("Bad n_hashes"))?.parse::<usize>().map_err(|_| {
+        format_err!("n_hashes must be an integer")
     })?;
-    let seed = matches.value_of("seed").ok_or("Bad seed")?.parse::<u64>().map_err(|_| "seed must be an integer")?;
-    let kmer_length = matches.value_of("kmer_length").ok_or("Bad kmer_length")?.parse::<u8>().map_err(|_| {
-        "kmer_length must be an integer < 256"
+    let seed = matches.value_of("seed").ok_or(format_err!("Bad seed"))?.parse::<u64>().map_err(|_| format_err!("seed must be an integer"))?;
+    let kmer_length = matches.value_of("kmer_length").ok_or(format_err!("Bad kmer_length"))?.parse::<u8>().map_err(|_| {
+        format_err!("kmer_length must be an integer < 256")
     })?;
 
     let no_strict = matches.is_present("no_strict");
@@ -364,32 +374,32 @@ fn open_mash_file(filename: &str, matches: &ArgMatches, default_sketch: Option<&
         (false, false) => None,
     };
     let min_abun_filter = match matches.occurrences_of("min_abun_filter") > 0 {
-        true => Some(matches.value_of("min_abun_filter").ok_or("Bad min_abun_filter")?.parse::<u16>().map_err(|_| {
-            format!("min_abun_filter must be a number greater than or equal to 0")
+        true => Some(matches.value_of("min_abun_filter").ok_or(format_err!("Bad min_abun_filter"))?.parse::<u16>().map_err(|_| {
+            format_err!("min_abun_filter must be a number greater than or equal to 0")
         })?),
         false => None,
     };
     let max_abun_filter = match matches.occurrences_of("max_abun_filter") > 0 {
-        true => Some(matches.value_of("max_abun_filter").ok_or("Bad max_abun_filter")?.parse::<u16>().map_err(|_| {
-            format!("max_abun_filter must be a number greater than or equal to 0")
+        true => Some(matches.value_of("max_abun_filter").ok_or(format_err!("Bad max_abun_filter"))?.parse::<u16>().map_err(|_| {
+            format_err!("max_abun_filter must be a number greater than or equal to 0")
         })?),
         false => None,
     };
-    let err_filter = matches.value_of("err_filter").ok_or("Bad err_filter")?.parse::<f32>().map_err(|_| {
-        format!("err-filter must be a number")
+    let err_filter = matches.value_of("err_filter").ok_or(format_err!("Bad err_filter"))?.parse::<f32>().map_err(|_| {
+        format_err!("err-filter must be a number")
     }).and_then(|r| {
         if 0f32 <= r && r <= 100f32 / kmer_length as f32 {
             return Ok(kmer_length as f32 * r / 100f32);
         }
-        Err(format!("err-filter must be a percent between 0 and {}", 100f32 / kmer_length as f32))
+        bail!("err-filter must be a percent between 0 and {}", 100f32 / kmer_length as f32)
     })?;
-    let strand_filter = matches.value_of("strand_filter").ok_or("Bad strand_filter")?.parse::<f32>().map_err(|_| {
-        format!("strand-filter must be a number")
+    let strand_filter = matches.value_of("strand_filter").ok_or(format_err!("Bad strand_filter"))?.parse::<f32>().map_err(|_| {
+        format_err!("strand-filter must be a number")
     }).and_then(|r| {
         if 0f32 <= r && r <= 1f32 {
             return Ok(r);
         }
-        Err(format!("strand-filter must be a ratio between 0 and 1"))
+        bail!("strand-filter must be a ratio between 0 and 1")
     })?;
 
     // note: is_present returns true while occurrences_of correctly is 0
@@ -400,8 +410,8 @@ fn open_mash_file(filename: &str, matches: &ArgMatches, default_sketch: Option<&
         strand_filter: strand_filter,
     };
 
-    let oversketch = matches.value_of("oversketch").ok_or("Bad oversketch")?.parse::<usize>().map_err(|_| {
-        "bad value for oversketch"
+    let oversketch = matches.value_of("oversketch").ok_or(format_err!("Bad oversketch"))?.parse::<usize>().map_err(|_| {
+        format_err!("bad value for oversketch")
     })?;
     let sketch_size = final_sketch_size * oversketch;
 
@@ -415,11 +425,11 @@ fn open_mash_file(filename: &str, matches: &ArgMatches, default_sketch: Option<&
 
     // otherwise we just open the file and return the sketches
     let file = File::open(filename).map_err(|_|
-        format!("Error opening {}", &filename)
+        format_err!("Error opening {}", &filename)
     )?;
     let buf_reader = BufReader::new(file);
     let mut json: JSONMultiSketch = serde_json::from_reader(buf_reader).map_err(|_|
-        format!("Error parsing {}", &filename)
+        format_err!("Error parsing {}", &filename)
     )?;
 
     // if filtering is explicitly set, re-filter the hashes
@@ -433,13 +443,13 @@ fn open_mash_file(filename: &str, matches: &ArgMatches, default_sketch: Option<&
     if let Some(s) = default_sketch {
         // kmer, hashType, hashSeed, and hashBits must be same
         if s.kmer != json.kmer {
-            return Err(format!("{} has a different kmer length ({}) from others ({})", filename, s.kmer, json.kmer));
+            bail!("{} has a different kmer length ({}) from others ({})", filename, s.kmer, json.kmer);
         } else if s.hashType != json.hashType {
-            return Err(format!("{} used a different hash ({}) from others ({})", filename, s.hashType, json.hashType));
+            bail!("{} used a different hash ({}) from others ({})", filename, s.hashType, json.hashType);
         } else if s.hashSeed != json.hashSeed {
-            return Err(format!("{} had a different hash seed ({}) from others ({})", filename, s.hashSeed, json.hashSeed));
+            bail!("{} had a different hash seed ({}) from others ({})", filename, s.hashSeed, json.hashSeed);
         } else if s.hashBits != json.hashBits {
-            return Err(format!("{} used a different length hash ({}) from others ({})", filename, s.hashBits, json.hashBits));
+            bail!("{} used a different length hash ({}) from others ({})", filename, s.hashBits, json.hashBits);
         }
     }
     Ok(json)
