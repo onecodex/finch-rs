@@ -13,7 +13,7 @@ use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use finch::{mash_files, Result};
 use finch::distance::distance;
 use finch::filtering::{FilterParams};
-use finch::serialization::{JSONSketch, JSONMultiSketch, SketchDistance};
+use finch::serialization::{Sketch, MultiSketch, SketchDistance};
 use finch::statistics::{hist, cardinality};
 
 const FINCH_EXT: &'static str = ".sk";
@@ -312,7 +312,7 @@ fn run() -> Result<()> {
 }
 
 
-fn parse_all_mash_files(matches: &ArgMatches) -> Result<JSONMultiSketch> {
+fn parse_all_mash_files(matches: &ArgMatches) -> Result<MultiSketch> {
     let filenames: Vec<_> = matches.values_of("INPUT").ok_or(format_err!("Bad INPUT"))?.collect();
     let mut filename_iter = filenames.iter();
     let filename = filename_iter.next().ok_or(format_err!("At least one filename must be specified"))?;
@@ -325,7 +325,7 @@ fn parse_all_mash_files(matches: &ArgMatches) -> Result<JSONMultiSketch> {
     Ok(sketches)
 }
 
-fn parse_mash_files<P>(matches: &ArgMatches, ref mut parser: P) -> Result<()> where P: FnMut(&JSONMultiSketch, &str) -> () {
+fn parse_mash_files<P>(matches: &ArgMatches, ref mut parser: P) -> Result<()> where P: FnMut(&MultiSketch, &str) -> () {
     let filenames: Vec<_> = matches.values_of("INPUT").ok_or(format_err!("Bad INPUT"))?.collect();
     let mut filename_iter = filenames.iter();
     let filename = filename_iter.next().ok_or(format_err!("At least one filename must be specified"))?;
@@ -339,7 +339,7 @@ fn parse_mash_files<P>(matches: &ArgMatches, ref mut parser: P) -> Result<()> wh
     Ok(())
 }
 
-fn calc_sketch_distances(query_sketches: &[&JSONSketch], ref_sketches: &[JSONSketch], mash_mode: bool, max_distance: f64) -> Vec<SketchDistance> {
+fn calc_sketch_distances(query_sketches: &[&Sketch], ref_sketches: &[Sketch], mash_mode: bool, max_distance: f64) -> Vec<SketchDistance> {
     let mut distances = Vec::new();
     for ref_sketch in ref_sketches.iter() {
         let rsketch = &ref_sketch.get_kmers().unwrap();
@@ -357,7 +357,7 @@ fn calc_sketch_distances(query_sketches: &[&JSONSketch], ref_sketches: &[JSONSke
     distances
 }
 
-fn open_mash_file(filename: &str, matches: &ArgMatches, default_sketch: Option<&JSONMultiSketch>) -> Result<JSONMultiSketch> {
+fn open_mash_file(filename: &str, matches: &ArgMatches, default_sketch: Option<&MultiSketch>) -> Result<MultiSketch> {
     let final_sketch_size = matches.value_of("n_hashes").ok_or(format_err!("Bad n_hashes"))?.parse::<usize>().map_err(|_| {
         format_err!("n_hashes must be an integer")
     })?;
@@ -428,7 +428,7 @@ fn open_mash_file(filename: &str, matches: &ArgMatches, default_sketch: Option<&
         format_err!("Error opening {}", &filename)
     )?;
     let buf_reader = BufReader::new(file);
-    let mut json: JSONMultiSketch = serde_json::from_reader(buf_reader).map_err(|_|
+    let mut json: MultiSketch = serde_json::from_reader(buf_reader).map_err(|_|
         format_err!("Error parsing {}", &filename)
     )?;
 
