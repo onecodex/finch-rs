@@ -3,6 +3,7 @@
 // source: src/mash/capnp/MinHash.capnp from https://github.com/marbl/Mash
 
 
+#[allow(dead_code)]
 pub mod min_hash {
   #[derive(Copy, Clone)]
   pub struct Owned;

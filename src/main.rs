@@ -5,7 +5,7 @@ extern crate serde_json;
 
 use std::fs::File;
 use std::collections::{HashMap, HashSet};
-use std::io::{stderr, BufReader, Write};
+use std::io::{stderr, stdout, BufReader, Write};
 use std::process::exit;
 
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
@@ -13,10 +13,11 @@ use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use finch::{mash_files, Result};
 use finch::distance::distance;
 use finch::filtering::{FilterParams};
-use finch::serialization::{Sketch, MultiSketch, SketchDistance};
+use finch::serialization::{Sketch, MultiSketch, SketchDistance, read_mash_file, write_mash_file};
 use finch::statistics::{hist, cardinality};
 
 const FINCH_EXT: &'static str = ".sk";
+const MASH_EXT: &'static str = ".msh";
 
 macro_rules! add_output_options {
     ($cmd:ident) => {
@@ -33,38 +34,34 @@ macro_rules! add_output_options {
     };
 }
 
-// got a little macro-happy here; this could maybe just be a function
-// and we could be smarter about how we pass borrows in here?
-macro_rules! output_to {
-    ($object: ident, $matches: ident, $default_ext: expr) => {
-        let output = $matches.value_of("output_file");
-        match output {
-            None => {
-                let text = serde_json::to_string(&$object).map_err(|_| {
-                    format_err!("Could not serialize JSON to string")
-                })?;
-                println!("{}", text);
-            },
-            Some(o) => {
-                // if the filename doesn't have the right extension
-                // add it on
-                let filename = String::from(o);
-                let out_filename = if filename.ends_with($default_ext) {
-                    filename
-                } else {
-                    filename + $default_ext
-                };
+fn output_to<F>(output_fn: F, matches: &ArgMatches, extension: &str) -> Result<()> where
+    F: Fn(&mut Write) -> Result<()>,
+{
+    let output = matches.value_of("output_file");
+    match output {
+        None => {
+            let mut out = stdout();
+            output_fn(&mut out)?;
+        },
+        Some(o) => {
+            // if the filename doesn't have the right extension
+            // add it on
+            let filename = String::from(o);
+            let out_filename = if filename.ends_with(extension) {
+                filename
+            } else {
+                filename + extension
+            };
 
-                let mut out = File::create(&out_filename).map_err(|_| {
-                    format_err!("Could not create {}", out_filename)
-                })?;
-                let _ = out.write_all(&serde_json::to_vec(&$object).map_err(|_| {
-                    format_err!("Could not serialize JSON to bytes")
-                })?);
-            },
-        };
-    }
+            let mut out = File::create(&out_filename).map_err(|_| {
+                format_err!("Could not create {}", out_filename)
+            })?;
+            output_fn(&mut out)?;
+        },
+    };
+    Ok(())
 }
+
 
 macro_rules! add_kmer_options {
     ($cmd:ident) => {
@@ -149,6 +146,12 @@ fn run() -> Result<()> {
              .help("The file(s) to sketch")
              .multiple(true)
              .required(true));
+    if cfg!(feature = "mash_format") {
+        sketch_command = sketch_command.arg(Arg::with_name("binary_format")
+             .short("b")
+             .long("binary-format")
+             .help("Outputs sketch in a binary format compatible with `mash`"));
+    }
     add_output_options!(sketch_command);
     add_kmer_options!(sketch_command);
 
@@ -213,17 +216,33 @@ fn run() -> Result<()> {
         .get_matches();
 
     if let Some(matches) = matches.subcommand_matches("sketch") {
+        let file_ext = if matches.is_present("binary_format") {
+            MASH_EXT
+        } else {
+            FINCH_EXT
+        };
         if matches.is_present("output_file") || matches.is_present("std_out") {
             let sketches = parse_all_mash_files(matches)?;
-            output_to!(sketches, matches, FINCH_EXT);
+            output_to(|writer| {
+                if matches.is_present("binary_format") {
+                    write_mash_file(writer, &sketches)?;
+                } else {
+                    serde_json::to_writer(writer, &sketches)?;
+                }
+                Ok(())
+            }, &matches, &file_ext)?;
         } else {
             // "sketch in place"
             parse_mash_files(matches, |multisketch, filename| {
-                let out_filename = filename.to_string() + FINCH_EXT;
+                let out_filename = filename.to_string() + &file_ext;
                 let mut out = File::create(&out_filename).map_err(|_| {
                     format_err!("Could not open {}", out_filename)
                 }).unwrap();
-                let _ = out.write_all(&serde_json::to_vec(&multisketch).unwrap());
+                if matches.is_present("binary_format") {
+                    write_mash_file(&mut out, &multisketch).unwrap();
+                } else {
+                    serde_json::to_writer(&mut out, &multisketch).unwrap();
+                }
             })?;
         }
     } else if let Some(matches) = matches.subcommand_matches("dist") {
@@ -263,7 +282,13 @@ fn run() -> Result<()> {
         }
 
         let mut distances = calc_sketch_distances(&query_sketches, &all_sketches.sketches, mash_mode, max_dist);
-        output_to!(distances, matches, ".json");
+
+        output_to(|writer| {
+            serde_json::to_writer(writer, &distances).map_err(|_| {
+                format_err!("Could not serialize JSON to file")
+            })?;
+            Ok(())
+        }, &matches, ".json")?;
     } else if let Some(matches) = matches.subcommand_matches("hist") {
         let mut hist_map: HashMap<String, Vec<u64>> = HashMap::new();
         parse_mash_files(matches, |multisketch, _| {
@@ -272,8 +297,14 @@ fn run() -> Result<()> {
             }
         })?;
 
-        output_to!(hist_map, matches, ".json");
+        output_to(|writer| {
+            serde_json::to_writer(writer, &hist_map).map_err(|_| {
+                format_err!("Could not serialize JSON to file")
+            })?;
+            Ok(())
+        }, &matches, ".json")?;
     } else if let Some(matches) = matches.subcommand_matches("info") {
+        // TODO: this should probably output JSON
         parse_mash_files(matches, |multisketch, _| {
             for sketch in multisketch.sketches.iter() {
                 print!("{}", &sketch.name);
@@ -416,7 +447,7 @@ fn open_mash_file(filename: &str, matches: &ArgMatches, default_sketch: Option<&
     let sketch_size = final_sketch_size * oversketch;
 
     // if the file isn't a sketch file, we try to sketch it and pass the sketches back
-    if !filename.ends_with(FINCH_EXT) {
+    if !filename.ends_with(FINCH_EXT) && !filename.ends_with(MASH_EXT) {
         return match default_sketch {
             Some(s) => mash_files(vec![filename], sketch_size / final_sketch_size * s.sketchSize as usize, s.sketchSize as usize, s.kmer, &mut filters, no_strict, s.hashSeed),
             None => mash_files(vec![filename], sketch_size, final_sketch_size, kmer_length, &mut filters, no_strict, seed),
@@ -427,10 +458,14 @@ fn open_mash_file(filename: &str, matches: &ArgMatches, default_sketch: Option<&
     let file = File::open(filename).map_err(|_|
         format_err!("Error opening {}", &filename)
     )?;
-    let buf_reader = BufReader::new(file);
-    let mut json: MultiSketch = serde_json::from_reader(buf_reader).map_err(|_|
-        format_err!("Error parsing {}", &filename)
-    )?;
+    let mut buf_reader = BufReader::new(file);
+    let mut json: MultiSketch = if filename.ends_with(FINCH_EXT) {
+        serde_json::from_reader(buf_reader).map_err(|_|
+            format_err!("Error parsing {}", &filename)
+        )?
+    } else {
+        read_mash_file(&mut buf_reader)?
+    };
 
     // if filtering is explicitly set, re-filter the hashes
     if filters.filter_on == Some(true) {

@@ -1,19 +1,18 @@
 use std::collections::HashMap;
 use std::io::{BufRead, Write};
-use std::io::Result as IOResult;
 
 #[cfg(feature = "mash_format")]
-use capnp::{serialize_packed, message};
-use needletail::bitkmer::{bytes_to_bitmer, bitmer_to_bytes};
-use serde::de::{Deserialize, Deserializer, Visitor, SeqAccess, MapAccess};
+use capnp::serialize as capnp_serialize;
+#[cfg(feature = "mash_format")]
+use capnp::message;
+use serde::de::{Deserialize, Deserializer};
 use serde::ser::{Serialize, Serializer, SerializeStruct};
 
 use filtering::{FilterParams, filter_sketch};
-use minhashes::{KmerCount, hash_f};
+use minhashes::{ItemHash, KmerCount};
 #[cfg(feature = "mash_format")]
-use mash_capnp::{min_hash};
+use mash_capnp::min_hash;
 use ::Result as FinchResult;
-// min_hash, reference_list, reference, locus_list, locus
 
 
 #[allow(non_snake_case)]
@@ -69,25 +68,24 @@ impl Serialize for Sketch {
 }
 
 
-#[allow(non_snake_case)]
-#[derive(Debug, Deserialize)]
-struct JSONSketch {
-    pub name: String,
-    pub seqLength: Option<u64>,
-    pub numValidKmers: Option<u64>,
-    pub comment: Option<String>,
-    pub filters: Option<HashMap<String, String>>,
-    hashes: Vec<String>,
-    kmers: Option<Vec<String>>,
-    counts: Option<Vec<u16>>,
-}
-
-
 impl<'de> Deserialize<'de> for Sketch {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>
     {
+        #[allow(non_snake_case)]
+        #[derive(Debug, Deserialize)]
+        struct JSONSketch {
+            pub name: String,
+            pub seqLength: Option<u64>,
+            pub numValidKmers: Option<u64>,
+            pub comment: Option<String>,
+            pub filters: Option<HashMap<String, String>>,
+            hashes: Vec<String>,
+            kmers: Option<Vec<String>>,
+            counts: Option<Vec<u16>>,
+        }
+
         let jsketch = JSONSketch::deserialize(deserializer)?;
 
         let mut kmercount_list = Vec::with_capacity(jsketch.hashes.len());
@@ -165,4 +163,108 @@ impl Sketch {
         self.filters = Some(filter_stats);
         true
     }
+}
+
+
+#[cfg(feature = "mash_format")]
+pub fn write_mash_file(mut file: &mut Write, sketches: &MultiSketch) -> FinchResult<()> {
+    let mut message = message::Builder::new_default();
+    {
+        let mut mash_file: min_hash::Builder = message.init_root::<min_hash::Builder>();
+        mash_file.set_kmer_size(sketches.kmer as u32);
+        mash_file.set_window_size(sketches.kmer as u32);
+        mash_file.set_error(0.0);  // TODO: from filters?
+        mash_file.set_noncanonical(!sketches.canonical);
+        mash_file.set_preserve_case(sketches.preserveCase);
+        mash_file.set_hash_seed(sketches.hashSeed as u32);
+        mash_file.set_alphabet(&sketches.alphabet);
+        // not sure what these two mean?
+        let largest_size = sketches.sketches.iter().map(|s| s.hashes.len()).max().unwrap_or(1);
+        mash_file.set_min_hashes_per_window(largest_size as u32);
+        mash_file.set_concatenated(true);
+
+        let mash_sketches_list = mash_file.init_reference_list();
+        let mut mash_sketches = mash_sketches_list.init_references(sketches.sketches.len() as u32);
+
+        for (i, sketch) in sketches.sketches.iter().enumerate() {
+            let mut mash_sketch: min_hash::reference_list::reference::Builder = mash_sketches.reborrow().get(i as u32);
+            mash_sketch.set_name(&sketch.name);
+            if let Some(ref comment) = sketch.comment {
+                mash_sketch.set_comment(&comment);
+            }
+            if let Some(seq_length) = sketch.seqLength {
+                mash_sketch.set_length64(seq_length);
+            }
+            {
+                let mut mash_hashes = mash_sketch.reborrow().init_hashes64(sketch.hashes.len() as u32);
+                for (j, hash) in sketch.hashes.iter().enumerate() {
+                    mash_hashes.reborrow().set(j as u32, hash.hash as u64);
+                }
+            }
+            let mut mash_counts = mash_sketch.init_counts32(sketch.hashes.len() as u32);
+            for (j, hash) in sketch.hashes.iter().enumerate() {
+                mash_counts.reborrow().set(j as u32, hash.count as u32);
+            }
+        }
+    }
+
+    capnp_serialize::write_message(&mut file, &message)?;
+    Ok(())
+}
+
+
+#[cfg(feature = "mash_format")]
+pub fn read_mash_file(mut file: &mut BufRead) -> FinchResult<MultiSketch> {
+    let reader = capnp_serialize::read_message(&mut file, message::ReaderOptions::new())?;
+    let mash_data: min_hash::Reader = reader.get_root::<min_hash::Reader>()?;
+
+    let mut sketches = MultiSketch {
+        kmer: mash_data.get_kmer_size() as u8,
+        alphabet: String::from(mash_data.get_alphabet()?),
+        preserveCase: mash_data.get_preserve_case(),
+        canonical: !mash_data.get_noncanonical(),
+        sketchSize: 0,
+        hashType: String::from("MurmurHash3_x64_128"),
+        hashBits: 64u16,
+        hashSeed: mash_data.get_kmer_size() as u64,
+        sketches: Vec::new(),
+    };
+
+    let reference_list = mash_data.get_reference_list()?;
+    let references = reference_list.get_references()?;
+
+    for reference in references {
+        let hashes = reference.get_hashes64()?;
+        let counts = reference.get_counts32()?;
+        let kmercounts = hashes.iter().zip(counts.iter()).map(|(h, c)| {
+            KmerCount {
+                hash: h as ItemHash,
+                kmer: Vec::new(),
+                count: c as u16,
+                extra_count: 0,
+            }
+        }).collect();
+
+        sketches.sketches.push(Sketch {
+            name: String::from(reference.get_name()?),
+            seqLength: Some(reference.get_length64()),
+            numValidKmers: Some(0),
+            comment: Some(String::from(reference.get_comment()?)),
+            filters: None,
+            hashes: kmercounts,
+        });
+    }
+
+    Ok(sketches)
+}
+
+
+#[cfg(not(feature = "mash_format"))]
+pub fn write_mash_file(mut file: &mut Write, sketches: &MultiSketch) -> FinchResult<()> {
+    bail!("Finch wasn't compiled with Mash format support")
+}
+
+#[cfg(not(feature = "mash_format"))]
+pub fn read_mash_file(mut file: &mut BufRead) -> FinchResult<MultiSketch> {
+    bail!("Finch wasn't compiled with Mash format support")
 }
