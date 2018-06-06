@@ -1,3 +1,5 @@
+#[cfg(feature = "mash_format")]
+extern crate capnp;
 #[macro_use] extern crate failure;
 extern crate needletail;
 extern crate murmurhash3;
@@ -13,17 +15,19 @@ use needletail::fastx::{fastx_cli, fastx_stream};
 
 use filtering::{FilterParams, filter_sketch};
 use minhashes::MinHashKmers;
-use serialization::{JSONSketch, JSONMultiSketch};
+use serialization::{Sketch, MultiSketch};
 
 pub mod minhashes;
 pub mod filtering;
 pub mod distance;
 pub mod serialization;
 pub mod statistics;
+#[cfg(feature = "mash_format")]
+mod mash_capnp;
 
 pub type Result<T> = StdResult<T, Error>;
 
-pub fn mash_files(filenames: Vec<&str>, n_hashes: usize, final_size: usize, kmer_length: u8, filters: &mut FilterParams, no_strict: bool, seed: u64) -> Result<JSONMultiSketch> {
+pub fn mash_files(filenames: Vec<&str>, n_hashes: usize, final_size: usize, kmer_length: u8, filters: &mut FilterParams, no_strict: bool, seed: u64) -> Result<MultiSketch> {
     let mut sketches = Vec::with_capacity(filenames.len());
     for filename in &filenames {
         let mut seq_len = 0u64;
@@ -63,11 +67,11 @@ pub fn mash_files(filenames: Vec<&str>, n_hashes: usize, final_size: usize, kmer
 
         // directory should be clipped from filename
         let basename = path.file_name().ok_or(format_err!("Couldn't get filename from path"))?;
-        let sketch = JSONSketch::new(basename.to_str().ok_or(format_err!("Couldn't make filename into string"))?,
+        let sketch = Sketch::new(basename.to_str().ok_or(format_err!("Couldn't make filename into string"))?,
                                      seq_len, n_kmers, filtered_hashes, &filter_stats);
         sketches.push(sketch);
     }
-    Ok(JSONMultiSketch {
+    Ok(MultiSketch {
         kmer: kmer_length,
         alphabet: String::from("ACGT"),
         preserveCase: false,
@@ -82,7 +86,7 @@ pub fn mash_files(filenames: Vec<&str>, n_hashes: usize, final_size: usize, kmer
 
 
 pub fn mash_stream<R>(reader: R, n_hashes: usize, final_size: usize, kmer_length: u8,
-                      filters: &mut FilterParams, no_strict: bool, seed: u64) -> Result<JSONSketch> where
+                      filters: &mut FilterParams, no_strict: bool, seed: u64) -> Result<Sketch> where
     R: Read + Seek,
 {
         let mut seq_len = 0u64;
@@ -119,5 +123,5 @@ pub fn mash_stream<R>(reader: R, n_hashes: usize, final_size: usize, kmer_length
             bail!("Stream had too few kmers ({}) to sketch", filtered_hashes.len());
         }
 
-        Ok(JSONSketch::new("", seq_len, n_kmers, filtered_hashes, &filter_stats))
+        Ok(Sketch::new("", seq_len, n_kmers, filtered_hashes, &filter_stats))
 }
