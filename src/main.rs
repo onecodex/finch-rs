@@ -125,7 +125,7 @@ fn main() {
     // see https://github.com/rust-lang-nursery/failure/issues/76
     if let Err(err) = run() {
         let mut serr = stderr();
-        let mut causes = err.causes();
+        let mut causes = err.iter_chain();
         writeln!(serr, "Error: {}", causes.next().expect("`causes` to at least contain `err`"))
             .expect("unable to write error to stderr");
         for cause in causes {
