@@ -1,8 +1,8 @@
 use std::cmp;
 use std::collections::HashMap;
 
-use minhashes::KmerCount;
-use statistics::hist;
+use crate::minhashes::KmerCount;
+use crate::statistics::hist;
 
 
 /// Used to pass around filter options for sketching

@@ -1,6 +1,6 @@
 use std::cmp;
 
-use minhashes::KmerCount;
+use crate::minhashes::KmerCount;
 
 
 pub fn cardinality(sketch: &Vec<KmerCount>) -> Result<u64, &'static str> {

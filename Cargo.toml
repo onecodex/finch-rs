@@ -8,9 +8,10 @@ categories = ["command-line-utilities", "science"]
 repository = "https://github.com/onecodex/finch-rs"
 license = "MIT"
 readme = "./README.md"
+edition = "2018"
 
 [dependencies]
-capnp = { version = "0.8.17", optional = true}
+capnp = { version = "0.9.4", optional = true}
 clap = "~2.32.0"
 failure = "0.1.2"
 murmurhash3 = "~0.0.5"

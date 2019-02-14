@@ -13,9 +13,9 @@ use std::result::Result as StdResult;
 use failure::Error;
 use needletail::fastx::{fastx_cli, fastx_stream};
 
-use filtering::{FilterParams, filter_sketch};
-use minhashes::MinHashKmers;
-use serialization::{Sketch, MultiSketch};
+use crate::filtering::{FilterParams, filter_sketch};
+use crate::minhashes::MinHashKmers;
+use crate::serialization::{Sketch, MultiSketch};
 
 pub mod minhashes;
 pub mod filtering;

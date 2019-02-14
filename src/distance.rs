@@ -1,5 +1,5 @@
-use minhashes::KmerCount;
-use serialization::SketchDistance;
+use crate::minhashes::KmerCount;
+use crate::serialization::SketchDistance;
 
 
 pub fn distance(sketch1: &[KmerCount], sketch2: &[KmerCount], sketch1_name: &str, sketch2_name: &str, mash_mode: bool) -> Result<SketchDistance, &'static str> {

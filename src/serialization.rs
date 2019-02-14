@@ -8,11 +8,11 @@ use capnp::message;
 use serde::de::{Deserialize, Deserializer};
 use serde::ser::{Serialize, Serializer, SerializeStruct};
 
-use filtering::{FilterParams, filter_sketch};
-use minhashes::{ItemHash, KmerCount};
+use crate::filtering::{FilterParams, filter_sketch};
+use crate::minhashes::{ItemHash, KmerCount};
 #[cfg(feature = "mash_format")]
-use mash_capnp::min_hash;
-use ::Result as FinchResult;
+use crate::mash_capnp::min_hash;
+use crate::Result as FinchResult;
 
 
 #[allow(non_snake_case)]
