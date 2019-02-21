@@ -16,6 +16,7 @@ clap = "~2.32.0"
 failure = "0.1.2"
 murmurhash3 = "~0.0.5"
 needletail = "0.2.2"
+pyo3 = { version = "0.5.0", optional = true }
 serde = "1.0.72"
 serde_derive = "1.0.72"
 serde_json = "1.0.26"
@@ -23,3 +24,7 @@ serde_json = "1.0.26"
 [features]
 default = ["mash_format"]
 mash_format = ["capnp"]
+python = ["pyo3"]
+
+[lib]
+crate-type=["cdylib", "rlib"]

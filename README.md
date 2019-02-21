@@ -172,6 +172,22 @@ There are several other implementations of the Mash algorithm which should be co
 Notes:
 - <sup>1</sup> Please see, however, [this issue tracking interoperability](https://github.com/marbl/Mash/issues/27) and note that other implementations may use a different seed value.
 
+## Python Support ##
+
+Optional Python bindings are in the `src/python.rs` file and can be built into a python library with:
+```bash
+rustup default nightly`
+# optionally: source venv/bin/activate
+./setup.py develop  # or build, etc
+```
+
+Then, e.g. to calculate the similarities between two E. coli:
+```python
+from finch import sketch_files
+ms = sketch_files(['WIS_EcoB_v2.fas', 'WIS_Eco10798_DRAFTv1.fas'], 1000, 1000, 21, False, 0)
+cont, jacc = ms.sketches[0].compare(ms.sketches[1])
+```
+
 ## Contributions ##
 
 Problems or suggestions for improvement can be reported through GitHub issues.

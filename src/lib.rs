@@ -1,8 +1,11 @@
+#![cfg_attr(feature = "python", feature(specialization))]
 #[cfg(feature = "mash_format")]
 extern crate capnp;
 #[macro_use] extern crate failure;
 extern crate needletail;
 extern crate murmurhash3;
+#[cfg(feature = "python")]
+#[macro_use] extern crate pyo3;
 extern crate serde;
 #[macro_use] extern crate serde_derive;
 extern crate serde_json;
@@ -24,12 +27,14 @@ pub mod serialization;
 pub mod statistics;
 #[cfg(feature = "mash_format")]
 mod mash_capnp;
+#[cfg(feature = "python")]
+mod python;
 
 pub type Result<T> = StdResult<T, Error>;
 
-pub fn mash_files(filenames: Vec<&str>, n_hashes: usize, final_size: usize, kmer_length: u8, filters: &mut FilterParams, no_strict: bool, seed: u64) -> Result<MultiSketch> {
+pub fn mash_files(filenames: &[&str], n_hashes: usize, final_size: usize, kmer_length: u8, filters: &mut FilterParams, no_strict: bool, seed: u64) -> Result<MultiSketch> {
     let mut sketches = Vec::with_capacity(filenames.len());
-    for filename in &filenames {
+    for filename in filenames {
         let mut seq_len = 0u64;
         let mut n_kmers = 0u64;
         let path = Path::new(filename);
@@ -39,7 +44,7 @@ pub fn mash_files(filenames: Vec<&str>, n_hashes: usize, final_size: usize, kmer
         };
         fastx_cli(path.to_str().ok_or(format_err!("Couldn't make path into string"))?, |seq_type| {
             // disable filtering for FASTA files unless it was explicitly specified
-            if let None = filters.filter_on {
+            if filters.filter_on.is_none() {
                 filters.filter_on = match seq_type {
                     "FASTA" => Some(false),
                     "FASTQ" => Some(true),
@@ -49,9 +54,10 @@ pub fn mash_files(filenames: Vec<&str>, n_hashes: usize, final_size: usize, kmer
         }, |seq| {
             seq_len += seq.seq.len() as u64;
             for (_, kmer, is_rev_complement) in seq.normalize(false).kmers(kmer_length, true) {
-                let rc_count = match is_rev_complement {
-                    true => 1u8,
-                    false => 0u8,
+                let rc_count = if is_rev_complement {
+                    1u8
+                } else {
+                    0u8
                 };
                 n_kmers += 1;
                 minhash.push(kmer, rc_count);
@@ -80,7 +86,7 @@ pub fn mash_files(filenames: Vec<&str>, n_hashes: usize, final_size: usize, kmer
         hashType: String::from("MurmurHash3_x64_128"),
         hashBits: 64u16,
         hashSeed: seed,
-        sketches: sketches,
+        sketches,
     })
 }
 
@@ -97,7 +103,7 @@ pub fn mash_stream<R>(reader: R, n_hashes: usize, final_size: usize, kmer_length
         };
         fastx_stream(reader, |seq_type| {
             // disable filtering for FASTA files unless it was explicitly specified
-            if let None = filters.filter_on {
+            if filters.filter_on.is_none() {
                 filters.filter_on = match seq_type {
                     "FASTA" => Some(false),
                     "FASTQ" => Some(true),
@@ -107,9 +113,10 @@ pub fn mash_stream<R>(reader: R, n_hashes: usize, final_size: usize, kmer_length
         }, |seq| {
             seq_len += seq.seq.len() as u64;
             for (_, kmer, is_rev_complement) in seq.normalize(false).kmers(kmer_length, true) {
-                let rc_count = match is_rev_complement {
-                    true => 1u8,
-                    false => 0u8,
+                let rc_count = if is_rev_complement {
+                    1u8
+                } else {
+                    0u8
                 };
                 n_kmers += 1;
                 minhash.push(kmer, rc_count);

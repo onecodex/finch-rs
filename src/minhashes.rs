@@ -50,7 +50,7 @@ pub struct NoHashHasher(u64);
 impl Default for NoHashHasher {
     #[inline]
     fn default() -> NoHashHasher {
-        NoHashHasher(0x0000000000000000)
+        NoHashHasher(0x0000_0000_0000_0000)
     }
 }
 
@@ -58,10 +58,10 @@ impl Hasher for NoHashHasher {
     #[inline]
     fn write(&mut self, bytes: &[u8]) {
         *self = NoHashHasher(
-            ((bytes[0] as u64) << 24) +
-            ((bytes[1] as u64) << 16) +
-            ((bytes[2] as u64) << 8) +
-            (bytes[3] as u64)
+            (u64::from(bytes[0]) << 24) +
+            (u64::from(bytes[1]) << 16) +
+            (u64::from(bytes[2]) << 8) +
+            u64::from(bytes[3])
         );
     }
     fn finish(&self) -> u64 { self.0 }
@@ -95,8 +95,8 @@ impl MinHashKmers {
             hashes: BinaryHeap::with_capacity(size + 1),
             counts: HashMap::with_capacity_and_hasher(size, BuildHasherDefault::default()),
             total_count: 0,
-            size: size,
-            seed: seed,
+            size,
+            seed,
             // heap_lock: Mutex::new(()),
             // map_lock: Mutex::new(()),
         }
@@ -115,7 +115,7 @@ impl MinHashKmers {
                 // let _lock = self.map_lock.lock().unwrap();
                 let count = self.counts.entry(new_hash).or_insert((0u16, 0u16));
                 (*count).0 += 1;
-                (*count).1 += extra_count as u16;
+                (*count).1 += u16::from(extra_count);
                 // drop(_lock);
             } else {
                 // let _ = self.heap_lock.lock().unwrap();
@@ -124,12 +124,12 @@ impl MinHashKmers {
                     item: kmer.to_owned(),
                 });
                 // let _map_lock = self.map_lock.lock().unwrap();
-                self.counts.insert(new_hash, (1u16, extra_count as u16));
+                self.counts.insert(new_hash, (1u16, u16::from(extra_count)));
                 if self.hashes.len() > self.size {
                     let hash = self.hashes.pop().unwrap();
                     let old_count = self.counts.remove(&hash.hash).unwrap().0;
                     // TODO: check if old_count / total_count > ...?
-                    self.total_count -= old_count as u64;
+                    self.total_count -= u64::from(old_count);
                 }
                 // drop(_lock);
                 // drop(_map_lock);
@@ -146,7 +146,7 @@ impl MinHashKmers {
 
         let mut results = Vec::with_capacity(vec.len());
         for item in vec.drain(..) {
-            let counts = *self.counts.get(&item.hash).unwrap();
+            let counts = self.counts[&item.hash];
             let new_item = KmerCount {
                 hash: item.hash,
                 kmer: item.item,

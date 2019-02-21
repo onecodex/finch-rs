@@ -13,11 +13,8 @@ use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use finch::{mash_files, Result};
 use finch::distance::distance;
 use finch::filtering::{FilterParams};
-use finch::serialization::{Sketch, MultiSketch, SketchDistance, read_mash_file, write_mash_file};
+use finch::serialization::{FINCH_EXT, MASH_EXT, Sketch, MultiSketch, SketchDistance, read_mash_file, write_mash_file};
 use finch::statistics::{hist, cardinality};
-
-const FINCH_EXT: &'static str = ".sk";
-const MASH_EXT: &'static str = ".msh";
 
 macro_rules! add_output_options {
     ($cmd:ident) => {
@@ -234,7 +231,7 @@ fn run() -> Result<()> {
         } else {
             // "sketch in place"
             parse_mash_files(matches, |multisketch, filename| {
-                let out_filename = filename.to_string() + &file_ext;
+                let out_filename = filename.to_string() + file_ext;
                 let mut out = File::create(&out_filename).map_err(|_| {
                     format_err!("Could not open {}", out_filename)
                 }).unwrap();
@@ -275,13 +272,13 @@ fn run() -> Result<()> {
                 }
             }
         } else {
-            if all_sketches.sketches.len() < 1 {
+            if all_sketches.sketches.is_empty() {
                 bail!("No sketches present!");
             }
             query_sketches.push(all_sketches.sketches.last().unwrap());
         }
 
-        let mut distances = calc_sketch_distances(&query_sketches, &all_sketches.sketches, mash_mode, max_dist);
+        let distances = calc_sketch_distances(&query_sketches, &all_sketches.sketches, mash_mode, max_dist);
 
         output_to(|writer| {
             serde_json::to_writer(writer, &distances).map_err(|_| {
@@ -293,7 +290,7 @@ fn run() -> Result<()> {
         let mut hist_map: HashMap<String, Vec<u64>> = HashMap::new();
         parse_mash_files(matches, |multisketch, _| {
             for sketch in multisketch.sketches.iter() {
-                hist_map.insert(sketch.name.to_string(), hist(&sketch.get_kmers().unwrap()));
+                hist_map.insert(sketch.name.to_string(), hist(&sketch.get_kmers()));
             }
         })?;
 
@@ -313,29 +310,28 @@ fn run() -> Result<()> {
                 } else {
                     println!("");
                 }
-                if let Some(kmers) = sketch.get_kmers() {
-                    if let Ok(c) = cardinality(&kmers) {
-                        println!("  Estimated # of Unique Kmers: {}", c);
-                    }
-
-                    let histogram = hist(&kmers);
-                    let mean = histogram.iter().enumerate()
-                        .map(|(i, v)| ((i as f32 + 1f32) * *v as f32, *v as f32))
-                        .fold((0f32, 0f32), |e, s| (e.0 + s.0, e.1 + s.1));
-                    println!("  Estimated Average Depth: {}x", mean.0 / mean.1);
-
-                    let mut total_gc: u64 = 0;
-                    for kmer in &kmers {
-                        total_gc += kmer.kmer.iter().map(|b| {
-                            match *b {
-                                b'G' | b'g' | b'C' | b'c' => kmer.count as u64,
-                                _ => 0,
-                            }
-                        }).sum::<u64>();
-                    }
-                    let total_bases = mean.0 * kmers[0].kmer.len() as f32;
-                    println!("  Estimated % GC: {}%", 100f32 * total_gc as f32 / total_bases);
+                let kmers = sketch.get_kmers();
+                if let Ok(c) = cardinality(&kmers) {
+                    println!("  Estimated # of Unique Kmers: {}", c);
                 }
+
+                let histogram = hist(&kmers);
+                let mean = histogram.iter().enumerate()
+                    .map(|(i, v)| ((i as f32 + 1f32) * *v as f32, *v as f32))
+                    .fold((0f32, 0f32), |e, s| (e.0 + s.0, e.1 + s.1));
+                println!("  Estimated Average Depth: {}x", mean.0 / mean.1);
+
+                let mut total_gc: u64 = 0;
+                for kmer in &kmers {
+                    total_gc += kmer.kmer.iter().map(|b| {
+                        match *b {
+                            b'G' | b'g' | b'C' | b'c' => u64::from(kmer.count),
+                            _ => 0,
+                        }
+                    }).sum::<u64>();
+                }
+                let total_bases = mean.0 * kmers[0].kmer.len() as f32;
+                println!("  Estimated % GC: {}%", 100f32 * total_gc as f32 / total_bases);
             }
         })?;
     }
@@ -356,7 +352,7 @@ fn parse_all_mash_files(matches: &ArgMatches) -> Result<MultiSketch> {
     Ok(sketches)
 }
 
-fn parse_mash_files<P>(matches: &ArgMatches, ref mut parser: P) -> Result<()> where P: FnMut(&MultiSketch, &str) -> () {
+fn parse_mash_files<P>(matches: &ArgMatches, mut parser: P) -> Result<()> where P: FnMut(&MultiSketch, &str) -> () {
     let filenames: Vec<_> = matches.values_of("INPUT").ok_or(format_err!("Bad INPUT"))?.collect();
     let mut filename_iter = filenames.iter();
     let filename = filename_iter.next().ok_or(format_err!("At least one filename must be specified"))?;
@@ -373,12 +369,12 @@ fn parse_mash_files<P>(matches: &ArgMatches, ref mut parser: P) -> Result<()> wh
 fn calc_sketch_distances(query_sketches: &[&Sketch], ref_sketches: &[Sketch], mash_mode: bool, max_distance: f64) -> Vec<SketchDistance> {
     let mut distances = Vec::new();
     for ref_sketch in ref_sketches.iter() {
-        let rsketch = &ref_sketch.get_kmers().unwrap();
+        let rsketch = &ref_sketch.get_kmers();
         for query_sketch in query_sketches.iter() {
             if query_sketch == &ref_sketch {
                 continue;
             }
-            let qsketch = &query_sketch.get_kmers().unwrap();
+            let qsketch = &query_sketch.get_kmers();
             let distance = distance(&qsketch, &rsketch, &query_sketch.name, &ref_sketch.name, mash_mode).unwrap();
             if distance.mashDistance <= max_distance {
                 distances.push(distance);
@@ -404,25 +400,27 @@ fn open_mash_file(filename: &str, matches: &ArgMatches, default_sketch: Option<&
         (false, true) => Some(false),
         (false, false) => None,
     };
-    let min_abun_filter = match matches.occurrences_of("min_abun_filter") > 0 {
-        true => Some(matches.value_of("min_abun_filter").ok_or(format_err!("Bad min_abun_filter"))?.parse::<u16>().map_err(|_| {
+    let min_abun_filter = if matches.occurrences_of("min_abun_filter") > 0 {
+        Some(matches.value_of("min_abun_filter").ok_or(format_err!("Bad min_abun_filter"))?.parse::<u16>().map_err(|_| {
             format_err!("min_abun_filter must be a number greater than or equal to 0")
-        })?),
-        false => None,
+        })?)
+    } else {
+        None
     };
-    let max_abun_filter = match matches.occurrences_of("max_abun_filter") > 0 {
-        true => Some(matches.value_of("max_abun_filter").ok_or(format_err!("Bad max_abun_filter"))?.parse::<u16>().map_err(|_| {
+    let max_abun_filter = if matches.occurrences_of("max_abun_filter") > 0 {
+        Some(matches.value_of("max_abun_filter").ok_or(format_err!("Bad max_abun_filter"))?.parse::<u16>().map_err(|_| {
             format_err!("max_abun_filter must be a number greater than or equal to 0")
-        })?),
-        false => None,
+        })?)
+    } else {
+        None
     };
     let err_filter = matches.value_of("err_filter").ok_or(format_err!("Bad err_filter"))?.parse::<f32>().map_err(|_| {
         format_err!("err-filter must be a number")
     }).and_then(|r| {
-        if 0f32 <= r && r <= 100f32 / kmer_length as f32 {
-            return Ok(kmer_length as f32 * r / 100f32);
+        if 0f32 <= r && r <= 100f32 / f32::from(kmer_length) {
+            return Ok(f32::from(kmer_length) * r / 100f32);
         }
-        bail!("err-filter must be a percent between 0 and {}", 100f32 / kmer_length as f32)
+        bail!("err-filter must be a percent between 0 and {}", 100f32 / f32::from(kmer_length))
     })?;
     let strand_filter = matches.value_of("strand_filter").ok_or(format_err!("Bad strand_filter"))?.parse::<f32>().map_err(|_| {
         format_err!("strand-filter must be a number")
@@ -435,10 +433,10 @@ fn open_mash_file(filename: &str, matches: &ArgMatches, default_sketch: Option<&
 
     // note: is_present returns true while occurrences_of correctly is 0
     let mut filters = FilterParams {
-        filter_on: filter_on,
+        filter_on,
         abun_filter: (min_abun_filter, max_abun_filter),
-        err_filter: err_filter,
-        strand_filter: strand_filter,
+        err_filter,
+        strand_filter,
     };
 
     let oversketch = matches.value_of("oversketch").ok_or(format_err!("Bad oversketch"))?.parse::<usize>().map_err(|_| {
@@ -449,8 +447,8 @@ fn open_mash_file(filename: &str, matches: &ArgMatches, default_sketch: Option<&
     // if the file isn't a sketch file, we try to sketch it and pass the sketches back
     if !filename.ends_with(FINCH_EXT) && !filename.ends_with(MASH_EXT) {
         return match default_sketch {
-            Some(s) => mash_files(vec![filename], sketch_size / final_sketch_size * s.sketchSize as usize, s.sketchSize as usize, s.kmer, &mut filters, no_strict, s.hashSeed),
-            None => mash_files(vec![filename], sketch_size, final_sketch_size, kmer_length, &mut filters, no_strict, seed),
+            Some(s) => mash_files(&[filename], sketch_size / final_sketch_size * s.sketchSize as usize, s.sketchSize as usize, s.kmer, &mut filters, no_strict, s.hashSeed),
+            None => mash_files(&[filename], sketch_size, final_sketch_size, kmer_length, &mut filters, no_strict, seed),
         };
     }
 

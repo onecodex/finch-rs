@@ -14,6 +14,9 @@ use crate::minhashes::{ItemHash, KmerCount};
 use crate::mash_capnp::min_hash;
 use crate::Result as FinchResult;
 
+pub const FINCH_EXT: &str = ".sk";
+pub const MASH_EXT: &str = ".msh";
+
 
 #[allow(non_snake_case)]
 #[derive(Debug, Serialize, Deserialize)]
@@ -106,9 +109,9 @@ impl<'de> Deserialize<'de> for Sketch {
                 None => count = 1,
             }
             kmercount_list.push(KmerCount {
-                hash: hash,
-                kmer: kmer,
-                count: count,
+                hash,
+                kmer,
+                count,
                 extra_count: count / 2,
             });
         }
@@ -153,8 +156,16 @@ impl Sketch {
         self.hashes.len()
     }
 
-    pub fn get_kmers(&self) -> Option<Vec<KmerCount>> {
-        Some(self.hashes.clone())
+    pub fn is_empty(&self) -> bool {
+        self.hashes.is_empty()
+    }
+
+    pub fn get_kmers(&self) -> Vec<KmerCount> {
+        self.hashes.clone()
+    }
+
+    pub fn set_kmers(&mut self, hashes: &[KmerCount]) {
+        self.hashes = hashes.to_vec();
     }
 
     pub fn apply_filtering(&mut self, filters: &FilterParams) -> bool {
@@ -171,8 +182,8 @@ pub fn write_mash_file(mut file: &mut Write, sketches: &MultiSketch) -> FinchRes
     let mut message = message::Builder::new_default();
     {
         let mut mash_file: min_hash::Builder = message.init_root::<min_hash::Builder>();
-        mash_file.set_kmer_size(sketches.kmer as u32);
-        mash_file.set_window_size(sketches.kmer as u32);
+        mash_file.set_kmer_size(u32::from(sketches.kmer));
+        mash_file.set_window_size(u32::from(sketches.kmer));
         mash_file.set_error(0.0);  // TODO: from filters?
         mash_file.set_noncanonical(!sketches.canonical);
         mash_file.set_preserve_case(sketches.preserveCase);
@@ -196,14 +207,14 @@ pub fn write_mash_file(mut file: &mut Write, sketches: &MultiSketch) -> FinchRes
                 mash_sketch.set_length64(seq_length);
             }
             {
-                let mut mash_hashes = mash_sketch.reborrow().init_hashes64(sketch.hashes.len() as u32);
+                let mash_hashes = mash_sketch.reborrow().init_hashes64(sketch.hashes.len() as u32);
                 for (j, hash) in sketch.hashes.iter().enumerate() {
                     mash_hashes.reborrow().set(j as u32, hash.hash as u64);
                 }
             }
-            let mut mash_counts = mash_sketch.init_counts32(sketch.hashes.len() as u32);
+            let mash_counts = mash_sketch.init_counts32(sketch.hashes.len() as u32);
             for (j, hash) in sketch.hashes.iter().enumerate() {
-                mash_counts.reborrow().set(j as u32, hash.count as u32);
+                mash_counts.reborrow().set(j as u32, u32::from(hash.count));
             }
         }
     }
@@ -226,7 +237,7 @@ pub fn read_mash_file(mut file: &mut BufRead) -> FinchResult<MultiSketch> {
         sketchSize: 0,
         hashType: String::from("MurmurHash3_x64_128"),
         hashBits: 64u16,
-        hashSeed: mash_data.get_kmer_size() as u64,
+        hashSeed: u64::from(mash_data.get_kmer_size()),
         sketches: Vec::new(),
     };
 

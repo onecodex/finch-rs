@@ -29,7 +29,7 @@ pub fn filter_sketch(hashes: &[KmerCount], filters: &FilterParams) -> (Vec<KmerC
 
     if filter_on && filters.err_filter > 0f32 {
         let cutoff = guess_filter_threshold(&filtered_hashes, filters.err_filter);
-        if let None = low_abun_filter {
+        if low_abun_filter.is_none() {
             low_abun_filter = Some(cutoff);
             filter_stats.insert(String::from("errFilter"), filters.err_filter.to_string());
         }
@@ -195,7 +195,7 @@ pub fn filter_strands(sketch: &[KmerCount], ratio_cutoff: f32) -> Vec<KmerCount>
 
         // check the forward/reverse ratio and only add if it's within bounds
         let lowest_strand_count: u16 = cmp::min(kmer.extra_count, kmer.count - kmer.extra_count);
-        if (lowest_strand_count as f32 / kmer.count as f32) >= ratio_cutoff {
+        if (f32::from(lowest_strand_count) / f32::from(kmer.count)) >= ratio_cutoff {
             filtered.push(kmer.clone());
         }
     }

@@ -1,3 +1,7 @@
 target
 Cargo.lock
 .DS_Store
+
+*.so
+*.egg-info/
+venv/
