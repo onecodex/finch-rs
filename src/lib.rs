@@ -1,19 +1,13 @@
 #![cfg_attr(feature = "python", feature(specialization))]
+
 #[cfg(feature = "mash_format")]
 extern crate capnp;
-#[macro_use] extern crate failure;
-extern crate needletail;
-extern crate murmurhash3;
-#[cfg(feature = "python")]
-#[macro_use] extern crate pyo3;
-extern crate serde;
 #[macro_use] extern crate serde_derive;
-extern crate serde_json;
 
 use std::io::{Read, Seek};
 use std::path::Path;
 use std::result::Result as StdResult;
-use failure::Error;
+use failure::{Error, bail, format_err};
 use needletail::fastx::{fastx_cli, fastx_stream};
 
 use crate::filtering::{FilterParams, filter_sketch};
@@ -28,7 +22,7 @@ pub mod statistics;
 #[cfg(feature = "mash_format")]
 mod mash_capnp;
 #[cfg(feature = "python")]
-mod python;
+pub mod python;
 
 pub type Result<T> = StdResult<T, Error>;
 

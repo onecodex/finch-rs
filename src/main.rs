@@ -290,7 +290,7 @@ fn run() -> Result<()> {
         let mut hist_map: HashMap<String, Vec<u64>> = HashMap::new();
         parse_mash_files(matches, |multisketch, _| {
             for sketch in multisketch.sketches.iter() {
-                hist_map.insert(sketch.name.to_string(), hist(&sketch.get_kmers()));
+                hist_map.insert(sketch.name.to_string(), hist(&sketch.hashes));
             }
         })?;
 
@@ -310,19 +310,19 @@ fn run() -> Result<()> {
                 } else {
                     println!("");
                 }
-                let kmers = sketch.get_kmers();
-                if let Ok(c) = cardinality(&kmers) {
+                let kmers = &sketch.hashes;
+                if let Ok(c) = cardinality(kmers) {
                     println!("  Estimated # of Unique Kmers: {}", c);
                 }
 
-                let histogram = hist(&kmers);
+                let histogram = hist(kmers);
                 let mean = histogram.iter().enumerate()
                     .map(|(i, v)| ((i as f32 + 1f32) * *v as f32, *v as f32))
                     .fold((0f32, 0f32), |e, s| (e.0 + s.0, e.1 + s.1));
                 println!("  Estimated Average Depth: {}x", mean.0 / mean.1);
 
                 let mut total_gc: u64 = 0;
-                for kmer in &kmers {
+                for kmer in kmers {
                     total_gc += kmer.kmer.iter().map(|b| {
                         match *b {
                             b'G' | b'g' | b'C' | b'c' => u64::from(kmer.count),
@@ -369,12 +369,12 @@ fn parse_mash_files<P>(matches: &ArgMatches, mut parser: P) -> Result<()> where 
 fn calc_sketch_distances(query_sketches: &[&Sketch], ref_sketches: &[Sketch], mash_mode: bool, max_distance: f64) -> Vec<SketchDistance> {
     let mut distances = Vec::new();
     for ref_sketch in ref_sketches.iter() {
-        let rsketch = &ref_sketch.get_kmers();
+        let rsketch = &ref_sketch.hashes;
         for query_sketch in query_sketches.iter() {
             if query_sketch == &ref_sketch {
                 continue;
             }
-            let qsketch = &query_sketch.get_kmers();
+            let qsketch = &query_sketch.hashes;
             let distance = distance(&qsketch, &rsketch, &query_sketch.name, &ref_sketch.name, mash_mode).unwrap();
             if distance.mashDistance <= max_distance {
                 distances.push(distance);
@@ -445,7 +445,7 @@ fn open_mash_file(filename: &str, matches: &ArgMatches, default_sketch: Option<&
     let sketch_size = final_sketch_size * oversketch;
 
     // if the file isn't a sketch file, we try to sketch it and pass the sketches back
-    if !filename.ends_with(FINCH_EXT) && !filename.ends_with(MASH_EXT) {
+    if !filename.ends_with(".json") && !filename.ends_with(FINCH_EXT) && !filename.ends_with(MASH_EXT) {
         return match default_sketch {
             Some(s) => mash_files(&[filename], sketch_size / final_sketch_size * s.sketchSize as usize, s.sketchSize as usize, s.kmer, &mut filters, no_strict, s.hashSeed),
             None => mash_files(&[filename], sketch_size, final_sketch_size, kmer_length, &mut filters, no_strict, seed),
@@ -457,12 +457,12 @@ fn open_mash_file(filename: &str, matches: &ArgMatches, default_sketch: Option<&
         format_err!("Error opening {}", &filename)
     )?;
     let mut buf_reader = BufReader::new(file);
-    let mut json: MultiSketch = if filename.ends_with(FINCH_EXT) {
+    let mut json: MultiSketch = if filename.ends_with(MASH_EXT) {
+        read_mash_file(&mut buf_reader)?
+    } else {
         serde_json::from_reader(buf_reader).map_err(|_|
             format_err!("Error parsing {}", &filename)
         )?
-    } else {
-        read_mash_file(&mut buf_reader)?
     };
 
     // if filtering is explicitly set, re-filter the hashes

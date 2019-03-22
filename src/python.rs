@@ -2,15 +2,17 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
 
+use numpy::{PyArray, PyArray1, PyArray2};
+use pyo3::{py_exception, wrap_function};
 use pyo3::class::*;
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyType};
+use pyo3::types::{PyBytes, PyTuple, PyType};
 
 use crate::mash_files;
-use crate::distance::distance;
+use crate::distance::{common_counts, distance, minmer_matrix};
 use crate::filtering::FilterParams;
-// use crate::minhashes::KmerCount;
-use crate::serialization::{FINCH_EXT, read_mash_file, MultiSketch as MSType, Sketch as SType};
+use crate::minhashes::KmerCount;
+use crate::serialization::{MASH_EXT, read_mash_file, MultiSketch as MSType, Sketch as SType};
 
 py_exception!(finch, FinchError, pyo3::exceptions::Exception);
 
@@ -18,7 +20,7 @@ py_exception!(finch, FinchError, pyo3::exceptions::Exception);
 /// A Multisketch is a collection of Sketchs with information about their generation parameters
 /// (to make sure they're consistant for distance calculation).
 pub struct Multisketch {
-    ms: MSType,
+    pub ms: MSType,
 }
 
 #[pymethods]
@@ -32,13 +34,13 @@ impl Multisketch {
         // this is the same as in main.rs and we should probably refactor these together
         let file = File::open(filename)?;
         let mut buf_reader = BufReader::new(file);
-        let ms: MSType = if filename.ends_with(FINCH_EXT) {
-            serde_json::from_reader(buf_reader).map_err(|e|
+        let ms: MSType = if filename.ends_with(MASH_EXT) {
+            read_mash_file(&mut buf_reader).map_err(|e|
                 PyErr::new::<FinchError, _>(format!("{}", e))
             )?
         } else {
-            // TODO: check for mash extension
-            read_mash_file(&mut buf_reader).map_err(|e|
+            // TODO: check for a finch extension?
+            serde_json::from_reader(buf_reader).map_err(|e|
                 PyErr::new::<FinchError, _>(format!("{}", e))
             )?
         };
@@ -115,11 +117,11 @@ impl PyMappingProtocol for Multisketch {
     }
 }
 
-#[pyclass]
 /// A Sketch is a collection of deterministically-selected hashes from a single
 /// sequencing file.
+#[pyclass]
 pub struct Sketch {
-    s: SType,
+    pub s: SType,
 }
 
 #[pymethods]
@@ -166,7 +168,7 @@ impl Sketch {
     fn get_hashes(&self) -> PyResult<Vec<(usize, Py<PyBytes>, u16, u16)>> {
         let gil = Python::acquire_gil();
         let py = gil.python();
-        Ok(self.s.get_kmers().into_iter().map(|i| {
+        Ok(self.s.hashes.clone().into_iter().map(|i| {
             (i.hash, PyBytes::new(py, &i.kmer), i.count, i.extra_count)
         }).collect())
     }
@@ -197,20 +199,59 @@ impl Sketch {
     
     // TODO: merge sketches method
 
-    /// distance_to(sketch, mash_mode=False)
+    /// compare(sketch, mash_mode=False)
     ///
     /// Calculates the containment within and jaccard similarity to another sketch.
-    #[args(mash_mode=false)]
+    #[args(mash_mode=true)]
     pub fn compare(&self, sketch: &Sketch, mash_mode: bool) -> PyResult<(f64, f64)> {
         let dist = distance(
-            &self.s.get_kmers(),
-            &sketch.s.get_kmers(),
+            &self.s.hashes,
+            &sketch.s.hashes,
             &"",
             &"",
             mash_mode
         ).map_err(|e| PyErr::new::<FinchError, _>(format!("{}", e)))?;
             
         Ok((dist.containment, dist.jaccard))
+    }
+
+    /// compare_counts(sketch)
+    ///
+    ///
+    pub fn compare_counts(&self, sketch: &Sketch) -> PyResult<(u64, u64, u64, u64, u64)> {
+        Ok(common_counts(
+            &self.s.hashes,
+            &sketch.s.hashes,
+        ))
+    }
+
+    // /// compare_matrix(*sketches)
+    // ///
+    // /// Generates a numpy matrix of hash/kmer counts aligned to a "primary"
+    // /// reference. This matrix can then be used for downstream NNLS analysis.
+    #[args(args = "*")]
+    pub fn compare_matrix(&self, args: &PyTuple) -> PyResult<Py<PyArray2<u64>>> {
+        let sketches: Vec<&Sketch> = args.extract()?;
+        let sketch_kmers: Vec<&[KmerCount]> = sketches.iter().map(|s| {
+            &s.s.hashes[..]
+        }).collect();
+        let result = minmer_matrix(
+            &self.s.hashes,
+            &sketch_kmers,
+        );
+
+        let gil = Python::acquire_gil();
+        let py = gil.python();
+        Ok(PyArray::from_owned_array(py, result).to_owned())
+    }
+
+    #[getter]
+    pub fn get_counts(&self) -> PyResult<Py<PyArray1<u64>>> {
+        let result = self.s.hashes.iter().map(|k| u64::from(k.count));
+
+        let gil = Python::acquire_gil();
+        let py = gil.python();
+        Ok(PyArray::from_exact_iter(py, result).to_owned())
     }
 }
 

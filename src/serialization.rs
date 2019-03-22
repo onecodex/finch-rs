@@ -39,7 +39,7 @@ pub struct Sketch {
     pub numValidKmers: Option<u64>,
     pub comment: Option<String>,
     pub filters: Option<HashMap<String, String>>,
-    hashes: Vec<KmerCount>,
+    pub hashes: Vec<KmerCount>,
 }
 
 
@@ -158,14 +158,6 @@ impl Sketch {
 
     pub fn is_empty(&self) -> bool {
         self.hashes.is_empty()
-    }
-
-    pub fn get_kmers(&self) -> Vec<KmerCount> {
-        self.hashes.clone()
-    }
-
-    pub fn set_kmers(&mut self, hashes: &[KmerCount]) {
-        self.hashes = hashes.to_vec();
     }
 
     pub fn apply_filtering(&mut self, filters: &FilterParams) -> bool {
