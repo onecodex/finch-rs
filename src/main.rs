@@ -330,7 +330,11 @@ fn run() -> Result<()> {
                         }
                     }).sum::<u64>();
                 }
-                let total_bases = mean.0 * kmers[0].kmer.len() as f32;
+                let total_bases = if kmers.is_empty() {
+                    0f32
+                } else {
+                    mean.0 * kmers[0].kmer.len() as f32
+                };
                 println!("  Estimated % GC: {}%", 100f32 * total_gc as f32 / total_bases);
             }
         })?;

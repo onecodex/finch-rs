@@ -11,6 +11,9 @@ pub fn cardinality(sketch: &[KmerCount]) -> Result<u64, &'static str> {
 
     // fast and simple k-minimum value estimate
     // https://research.neustar.biz/2012/07/09/sketch-of-the-day-k-minimum-values/
+    if sketch.is_empty() {
+        return Ok(0u64)
+    }
     Ok(((sketch.len() - 1) as f32 / (sketch.last().unwrap().hash as f32 / usize::max_value() as f32)) as u64)
 }
 

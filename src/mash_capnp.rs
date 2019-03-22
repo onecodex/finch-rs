@@ -554,6 +554,10 @@ pub mod min_hash {
         pub fn has_counts32(&self) -> bool {
           !self.reader.get_pointer_field(6).is_null()
         }
+        #[inline]
+        pub fn get_num_valid_kmers(self) -> u64 {
+          self.reader.get_data_field::<u64>(2)
+        }
       }
 
       pub struct Builder<'a> { builder: ::capnp::private::layout::StructBuilder<'a> }
@@ -729,6 +733,14 @@ pub mod min_hash {
         pub fn has_counts32(&self) -> bool {
           !self.builder.get_pointer_field(6).is_null()
         }
+        #[inline]
+        pub fn get_num_valid_kmers(self) -> u64 {
+          self.builder.get_data_field::<u64>(2)
+        }
+        #[inline]
+        pub fn set_num_valid_kmers(&mut self, value: u64)  {
+          self.builder.set_data_field::<u64>(2, value);
+        }
       }
 
       pub struct Pipeline { _typeless: ::capnp::any_pointer::Pipeline }
@@ -741,7 +753,7 @@ pub mod min_hash {
       }
       mod _private {
         use capnp::private::layout;
-        pub const STRUCT_SIZE: layout::StructSize = layout::StructSize { data: 2, pointers: 7 };
+        pub const STRUCT_SIZE: layout::StructSize = layout::StructSize { data: 3, pointers: 7 };
         pub const TYPE_ID: u64 = 0x96c3_ea4c_bfe1_43bf;
       }
     }

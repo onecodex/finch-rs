@@ -198,6 +198,9 @@ pub fn write_mash_file(mut file: &mut Write, sketches: &MultiSketch) -> FinchRes
             if let Some(seq_length) = sketch.seqLength {
                 mash_sketch.set_length64(seq_length);
             }
+            if let Some(num_valid_kmers) = sketch.numValidKmers {
+                mash_sketch.set_num_valid_kmers(num_valid_kmers);
+            }
             {
                 let mash_hashes = mash_sketch.reborrow().init_hashes64(sketch.hashes.len() as u32);
                 for (j, hash) in sketch.hashes.iter().enumerate() {
@@ -234,24 +237,42 @@ pub fn read_mash_file(mut file: &mut BufRead) -> FinchResult<MultiSketch> {
     };
 
     let reference_list = mash_data.get_reference_list()?;
-    let references = reference_list.get_references()?;
+    let reference_list_old = mash_data.get_reference_list_old()?;
+
+    let references = if reference_list.has_references() {
+        reference_list.get_references()?
+    } else {
+        reference_list_old.get_references()?
+    };
 
     for reference in references {
         let hashes = reference.get_hashes64()?;
         let counts = reference.get_counts32()?;
-        let kmercounts = hashes.iter().zip(counts.iter()).map(|(h, c)| {
-            KmerCount {
-                hash: h as ItemHash,
-                kmer: Vec::new(),
-                count: c as u16,
-                extra_count: 0,
-            }
-        }).collect();
+        let kmercounts = if counts.len() == 0 {
+            // reference_list_old doesn't seem to have counts?
+            hashes.iter().map(|h| {
+                KmerCount {
+                    hash: h as ItemHash,
+                    kmer: Vec::new(),
+                    count: 1,
+                    extra_count: 0,
+                }
+            }).collect()
+        } else {
+            hashes.iter().zip(counts.iter()).map(|(h, c)| {
+                KmerCount {
+                    hash: h as ItemHash,
+                    kmer: Vec::new(),
+                    count: c as u16,
+                    extra_count: 0,
+                }
+            }).collect()
+        };
 
         sketches.sketches.push(Sketch {
             name: String::from(reference.get_name()?),
             seqLength: Some(reference.get_length64()),
-            numValidKmers: Some(0),
+            numValidKmers: Some(reference.get_num_valid_kmers()),
             comment: Some(String::from(reference.get_comment()?)),
             filters: None,
             hashes: kmercounts,
