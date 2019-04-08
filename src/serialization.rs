@@ -2,21 +2,20 @@ use std::collections::HashMap;
 use std::io::{BufRead, Write};
 
 #[cfg(feature = "mash_format")]
-use capnp::serialize as capnp_serialize;
-#[cfg(feature = "mash_format")]
 use capnp::message;
+#[cfg(feature = "mash_format")]
+use capnp::serialize as capnp_serialize;
 use serde::de::{Deserialize, Deserializer};
-use serde::ser::{Serialize, Serializer, SerializeStruct};
+use serde::ser::{Serialize, SerializeStruct, Serializer};
 
-use crate::filtering::{FilterParams, filter_sketch};
-use crate::minhashes::{ItemHash, KmerCount};
+use crate::filtering::{filter_sketch, FilterParams};
 #[cfg(feature = "mash_format")]
 use crate::mash_capnp::min_hash;
+use crate::minhashes::{ItemHash, KmerCount};
 use crate::Result as FinchResult;
 
 pub const FINCH_EXT: &str = ".sk";
 pub const MASH_EXT: &str = ".msh";
-
 
 #[allow(non_snake_case)]
 #[derive(Debug, Serialize, Deserialize)]
@@ -30,9 +29,8 @@ pub struct SketchDistance {
     pub reference: String,
 }
 
-
 #[allow(non_snake_case)]
-#[derive(Debug, Eq, PartialEq, Clone )]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Sketch {
     pub name: String,
     pub seqLength: Option<u64>,
@@ -41,7 +39,6 @@ pub struct Sketch {
     pub filters: Option<HashMap<String, String>>,
     pub hashes: Vec<KmerCount>,
 }
-
 
 impl Serialize for Sketch {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -70,11 +67,10 @@ impl Serialize for Sketch {
     }
 }
 
-
 impl<'de> Deserialize<'de> for Sketch {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: Deserializer<'de>
+        D: Deserializer<'de>,
     {
         #[allow(non_snake_case)]
         #[derive(Debug, Deserialize)]
@@ -141,7 +137,13 @@ pub struct MultiSketch {
 }
 
 impl Sketch {
-    pub fn new(name: &str, length: u64, n_kmers: u64, kmercounts: Vec<KmerCount>, filters: &HashMap<String, String>) -> Self {
+    pub fn new(
+        name: &str,
+        length: u64,
+        n_kmers: u64,
+        kmercounts: Vec<KmerCount>,
+        filters: &HashMap<String, String>,
+    ) -> Self {
         Sketch {
             name: String::from(name),
             seqLength: Some(length),
@@ -168,7 +170,6 @@ impl Sketch {
     }
 }
 
-
 #[cfg(feature = "mash_format")]
 pub fn write_mash_file(mut file: &mut Write, sketches: &MultiSketch) -> FinchResult<()> {
     let mut message = message::Builder::new_default();
@@ -176,13 +177,18 @@ pub fn write_mash_file(mut file: &mut Write, sketches: &MultiSketch) -> FinchRes
         let mut mash_file: min_hash::Builder = message.init_root::<min_hash::Builder>();
         mash_file.set_kmer_size(u32::from(sketches.kmer));
         mash_file.set_window_size(u32::from(sketches.kmer));
-        mash_file.set_error(0.0);  // TODO: from filters?
+        mash_file.set_error(0.0); // TODO: from filters?
         mash_file.set_noncanonical(!sketches.canonical);
         mash_file.set_preserve_case(sketches.preserveCase);
         mash_file.set_hash_seed(sketches.hashSeed as u32);
         mash_file.set_alphabet(&sketches.alphabet);
         // not sure what these two mean?
-        let largest_size = sketches.sketches.iter().map(|s| s.hashes.len()).max().unwrap_or(1);
+        let largest_size = sketches
+            .sketches
+            .iter()
+            .map(|s| s.hashes.len())
+            .max()
+            .unwrap_or(1);
         mash_file.set_min_hashes_per_window(largest_size as u32);
         mash_file.set_concatenated(true);
 
@@ -190,7 +196,8 @@ pub fn write_mash_file(mut file: &mut Write, sketches: &MultiSketch) -> FinchRes
         let mut mash_sketches = mash_sketches_list.init_references(sketches.sketches.len() as u32);
 
         for (i, sketch) in sketches.sketches.iter().enumerate() {
-            let mut mash_sketch: min_hash::reference_list::reference::Builder = mash_sketches.reborrow().get(i as u32);
+            let mut mash_sketch: min_hash::reference_list::reference::Builder =
+                mash_sketches.reborrow().get(i as u32);
             mash_sketch.set_name(&sketch.name);
             if let Some(ref comment) = sketch.comment {
                 mash_sketch.set_comment(&comment);
@@ -202,7 +209,9 @@ pub fn write_mash_file(mut file: &mut Write, sketches: &MultiSketch) -> FinchRes
                 mash_sketch.set_num_valid_kmers(num_valid_kmers);
             }
             {
-                let mash_hashes = mash_sketch.reborrow().init_hashes64(sketch.hashes.len() as u32);
+                let mash_hashes = mash_sketch
+                    .reborrow()
+                    .init_hashes64(sketch.hashes.len() as u32);
                 for (j, hash) in sketch.hashes.iter().enumerate() {
                     mash_hashes.reborrow().set(j as u32, hash.hash as u64);
                 }
@@ -250,23 +259,26 @@ pub fn read_mash_file(mut file: &mut BufRead) -> FinchResult<MultiSketch> {
         let counts = reference.get_counts32()?;
         let kmercounts = if counts.len() == 0 {
             // reference_list_old doesn't seem to have counts?
-            hashes.iter().map(|h| {
-                KmerCount {
+            hashes
+                .iter()
+                .map(|h| KmerCount {
                     hash: h as ItemHash,
                     kmer: Vec::new(),
                     count: 1,
                     extra_count: 0,
-                }
-            }).collect()
+                })
+                .collect()
         } else {
-            hashes.iter().zip(counts.iter()).map(|(h, c)| {
-                KmerCount {
+            hashes
+                .iter()
+                .zip(counts.iter())
+                .map(|(h, c)| KmerCount {
                     hash: h as ItemHash,
                     kmer: Vec::new(),
                     count: c as u16,
                     extra_count: 0,
-                }
-            }).collect()
+                })
+                .collect()
         };
 
         sketches.sketches.push(Sketch {
@@ -281,7 +293,6 @@ pub fn read_mash_file(mut file: &mut BufRead) -> FinchResult<MultiSketch> {
 
     Ok(sketches)
 }
-
 
 #[cfg(not(feature = "mash_format"))]
 pub fn write_mash_file(mut file: &mut Write, sketches: &MultiSketch) -> FinchResult<()> {

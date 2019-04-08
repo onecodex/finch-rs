@@ -2,7 +2,6 @@ use std::cmp;
 
 use crate::minhashes::KmerCount;
 
-
 pub fn cardinality(sketch: &[KmerCount]) -> Result<u64, &'static str> {
     // Other (possibly more accurate) possibilities:
     // "hyper log-log" estimate from lowest value?
@@ -12,11 +11,11 @@ pub fn cardinality(sketch: &[KmerCount]) -> Result<u64, &'static str> {
     // fast and simple k-minimum value estimate
     // https://research.neustar.biz/2012/07/09/sketch-of-the-day-k-minimum-values/
     if sketch.is_empty() {
-        return Ok(0u64)
+        return Ok(0u64);
     }
-    Ok(((sketch.len() - 1) as f32 / (sketch.last().unwrap().hash as f32 / usize::max_value() as f32)) as u64)
+    Ok(((sketch.len() - 1) as f32
+        / (sketch.last().unwrap().hash as f32 / usize::max_value() as f32)) as u64)
 }
-
 
 /// Generates a Vec of numbers of kmers for each coverage level
 ///
@@ -34,13 +33,27 @@ pub fn hist(sketch: &[KmerCount]) -> Vec<u64> {
     counts
 }
 
-
 #[test]
 fn test_hist() {
     let sketch = vec![
-        KmerCount {hash: 1, kmer: vec![], count: 1, extra_count: 0},
-        KmerCount {hash: 2, kmer: vec![], count: 1, extra_count: 0},
-        KmerCount {hash: 3, kmer: vec![], count: 1, extra_count: 0},
+        KmerCount {
+            hash: 1,
+            kmer: vec![],
+            count: 1,
+            extra_count: 0,
+        },
+        KmerCount {
+            hash: 2,
+            kmer: vec![],
+            count: 1,
+            extra_count: 0,
+        },
+        KmerCount {
+            hash: 3,
+            kmer: vec![],
+            count: 1,
+            extra_count: 0,
+        },
     ];
 
     let hist_data = hist(&sketch);
@@ -48,10 +61,30 @@ fn test_hist() {
     assert_eq!(hist_data[0], 3);
 
     let sketch = vec![
-        KmerCount {hash: 1, kmer: vec![], count: 4, extra_count: 0},
-        KmerCount {hash: 2, kmer: vec![], count: 2, extra_count: 0},
-        KmerCount {hash: 3, kmer: vec![], count: 4, extra_count: 0},
-        KmerCount {hash: 4, kmer: vec![], count: 3, extra_count: 0},
+        KmerCount {
+            hash: 1,
+            kmer: vec![],
+            count: 4,
+            extra_count: 0,
+        },
+        KmerCount {
+            hash: 2,
+            kmer: vec![],
+            count: 2,
+            extra_count: 0,
+        },
+        KmerCount {
+            hash: 3,
+            kmer: vec![],
+            count: 4,
+            extra_count: 0,
+        },
+        KmerCount {
+            hash: 4,
+            kmer: vec![],
+            count: 3,
+            extra_count: 0,
+        },
     ];
 
     let hist_data = hist(&sketch);

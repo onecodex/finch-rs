@@ -3,8 +3,13 @@ use ndarray::Array2;
 use crate::minhashes::KmerCount;
 use crate::serialization::SketchDistance;
 
-
-pub fn distance(sketch1: &[KmerCount], sketch2: &[KmerCount], sketch1_name: &str, sketch2_name: &str, mash_mode: bool) -> Result<SketchDistance, &'static str> {
+pub fn distance(
+    sketch1: &[KmerCount],
+    sketch2: &[KmerCount],
+    sketch1_name: &str,
+    sketch2_name: &str,
+    mash_mode: bool,
+) -> Result<SketchDistance, &'static str> {
     // // TODO: in principle this is a good check, but sometimes one of the kmers will be "" if
     // // serialized without and that break this
     // if sketch1[0].kmer.len() != sketch2[0].kmer.len() {
@@ -19,7 +24,8 @@ pub fn distance(sketch1: &[KmerCount], sketch2: &[KmerCount], sketch1_name: &str
     let jaccard = distances.1;
     let common = distances.2;
     let total = distances.3;
-    let mash_distance: f64 = -1.0 * ((2.0 * jaccard) / (1.0 + jaccard)).ln() / sketch1[0].kmer.len() as f64;
+    let mash_distance: f64 =
+        -1.0 * ((2.0 * jaccard) / (1.0 + jaccard)).ln() / sketch1[0].kmer.len() as f64;
     Ok(SketchDistance {
         containment,
         jaccard,
@@ -30,7 +36,6 @@ pub fn distance(sketch1: &[KmerCount], sketch2: &[KmerCount], sketch1_name: &str
         reference: sketch2_name.to_string(),
     })
 }
-
 
 fn raw_mash_distance(sketch1: &[KmerCount], sketch2: &[KmerCount]) -> (f64, f64, u64, u64) {
     let mut i: usize = 0;
@@ -71,17 +76,16 @@ fn raw_mash_distance(sketch1: &[KmerCount], sketch2: &[KmerCount]) -> (f64, f64,
     (containment, jaccard, common, total)
 }
 
-
 pub fn raw_distance(sketch1: &[KmerCount], sketch2: &[KmerCount]) -> (f64, f64, u64, u64) {
     let mut j: usize = 0;
     let mut common: u64 = 0;
     let mut total: u64 = 0;
-    
+
     for hash1 in sketch1 {
         while (sketch2[j].hash < hash1.hash) && (j < sketch2.len() - 1) {
             j += 1;
         }
-        
+
         if sketch2[j].hash == hash1.hash {
             common += 1;
         }
@@ -94,7 +98,6 @@ pub fn raw_distance(sketch1: &[KmerCount], sketch2: &[KmerCount]) -> (f64, f64, 
     let jaccard: f64 = common as f64 / (common + 2 * (total - common)) as f64;
     (containment, jaccard, common, total)
 }
-
 
 pub fn common_counts(sketch1: &[KmerCount], sketch2: &[KmerCount]) -> (u64, u64, u64, u64, u64) {
     let mut common: u64 = 0;
@@ -109,8 +112,8 @@ pub fn common_counts(sketch1: &[KmerCount], sketch2: &[KmerCount]) -> (u64, u64,
         } else if sketch2[pos2].hash < sketch1[pos1].hash {
             pos2 += 1;
         } else {
-            count1 += sketch1[pos1].count as u64;
-            count2 += sketch2[pos2].count as u64;
+            count1 += u64::from(sketch1[pos1].count);
+            count2 += u64::from(sketch2[pos2].count);
             pos1 += 1;
             pos2 += 1;
             common += 1;
@@ -120,11 +123,10 @@ pub fn common_counts(sketch1: &[KmerCount], sketch2: &[KmerCount]) -> (u64, u64,
     (common, pos1 as u64, pos2 as u64, count1, count2)
 }
 
-
 // TODO: add another method like this to allow 0's in ref sketch for hashes present in sketches?
 pub fn minmer_matrix<U>(ref_sketch: &[KmerCount], sketches: &[U]) -> Array2<u64>
 where
-    U: AsRef<[KmerCount]>
+    U: AsRef<[KmerCount]>,
 {
     let mut result = Array2::<u64>::zeros((sketches.len(), ref_sketch.len()));
 

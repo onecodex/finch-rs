@@ -1,10 +1,9 @@
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap};
-use std::hash::{Hasher, BuildHasherDefault};
+use std::hash::{BuildHasherDefault, Hasher};
 use std::usize;
 
 use murmurhash3::murmurhash3_x64_128;
-
 
 // The individual items to store in the BinaryHeap
 pub type ItemHash = usize;
@@ -14,13 +13,11 @@ pub fn hash_f(item: &[u8], seed: u64) -> ItemHash {
     murmurhash3_x64_128(item, seed).0 as ItemHash
 }
 
-
 #[derive(Debug, Clone)]
 struct HashedItem<T> {
     hash: ItemHash,
     item: T,
 }
-
 
 impl<T> PartialEq for HashedItem<T> {
     fn eq(&self, other: &HashedItem<T>) -> bool {
@@ -42,7 +39,6 @@ impl<T> PartialOrd for HashedItem<T> {
     }
 }
 
-
 /// If we're using a `HashMap` where the keys themselves are hashes, it's
 /// a little silly to re-hash them. That's where the `NoHashHasher` comes in.
 pub struct NoHashHasher(u64);
@@ -58,15 +54,16 @@ impl Hasher for NoHashHasher {
     #[inline]
     fn write(&mut self, bytes: &[u8]) {
         *self = NoHashHasher(
-            (u64::from(bytes[0]) << 24) +
-            (u64::from(bytes[1]) << 16) +
-            (u64::from(bytes[2]) << 8) +
-            u64::from(bytes[3])
+            (u64::from(bytes[0]) << 24)
+                + (u64::from(bytes[1]) << 16)
+                + (u64::from(bytes[2]) << 8)
+                + u64::from(bytes[3]),
         );
     }
-    fn finish(&self) -> u64 { self.0 }
+    fn finish(&self) -> u64 {
+        self.0
+    }
 }
-
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Hash, Serialize)]
 pub struct KmerCount {
@@ -83,9 +80,6 @@ pub struct MinHashKmers {
     total_kmers: u64,
     size: usize,
     seed: u64,
-    // heap_lock: Mutex<()>,
-    // instead of map_lock, look into using https://docs.rs/chashmap/0.1.2/chashmap/
-    // map_lock: Mutex<()>,
 }
 
 impl MinHashKmers {
@@ -96,8 +90,6 @@ impl MinHashKmers {
             total_kmers: 0,
             size,
             seed,
-            // heap_lock: Mutex::new(()),
-            // map_lock: Mutex::new(()),
         }
     }
 
@@ -106,30 +98,26 @@ impl MinHashKmers {
         let new_hash = hash_f(kmer, self.seed);
         let add_hash = match self.hashes.peek() {
             None => true,
-            Some(old_max_hash) => (new_hash <= (*old_max_hash).hash) || (self.hashes.len() < self.size),
+            Some(old_max_hash) => {
+                (new_hash <= (*old_max_hash).hash) || (self.hashes.len() < self.size)
+            }
         };
 
         if add_hash {
             if self.counts.contains_key(&new_hash) {
-                // let _lock = self.map_lock.lock().unwrap();
                 let count = self.counts.entry(new_hash).or_insert((0u16, 0u16));
                 (*count).0 += 1;
                 (*count).1 += u16::from(extra_count);
-                // drop(_lock);
             } else {
-                // let _ = self.heap_lock.lock().unwrap();
                 self.hashes.push(HashedItem {
                     hash: new_hash,
                     item: kmer.to_owned(),
                 });
-                // let _map_lock = self.map_lock.lock().unwrap();
                 self.counts.insert(new_hash, (1u16, u16::from(extra_count)));
                 if self.hashes.len() > self.size {
                     let hash = self.hashes.pop().unwrap();
                     let _ = self.counts.remove(&hash.hash).unwrap();
                 }
-                // drop(_lock);
-                // drop(_map_lock);
             }
         }
     }
@@ -195,5 +183,4 @@ fn test_longer_sequence() {
     //      13584836512372089324,
     //      14093285637546356047,
     //      16069721578136260683)
-
 }

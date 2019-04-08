@@ -3,16 +3,16 @@ use std::fs::File;
 use std::io::BufReader;
 
 use numpy::{PyArray, PyArray1, PyArray2};
-use pyo3::{py_exception, wrap_function};
 use pyo3::class::*;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyTuple, PyType};
+use pyo3::{py_exception, wrap_function};
 
-use crate::mash_files;
 use crate::distance::{common_counts, distance, minmer_matrix};
 use crate::filtering::FilterParams;
+use crate::mash_files;
 use crate::minhashes::KmerCount;
-use crate::serialization::{MASH_EXT, read_mash_file, MultiSketch as MSType, Sketch as SType};
+use crate::serialization::{read_mash_file, MultiSketch as MSType, Sketch as SType, MASH_EXT};
 
 py_exception!(finch, FinchError, pyo3::exceptions::Exception);
 
@@ -35,18 +35,15 @@ impl Multisketch {
         let file = File::open(filename)?;
         let mut buf_reader = BufReader::new(file);
         let ms: MSType = if filename.ends_with(MASH_EXT) {
-            read_mash_file(&mut buf_reader).map_err(|e|
-                PyErr::new::<FinchError, _>(format!("{}", e))
-            )?
+            read_mash_file(&mut buf_reader)
+                .map_err(|e| PyErr::new::<FinchError, _>(format!("{}", e)))?
         } else {
             // TODO: check for a finch extension?
-            serde_json::from_reader(buf_reader).map_err(|e|
-                PyErr::new::<FinchError, _>(format!("{}", e))
-            )?
+            serde_json::from_reader(buf_reader)
+                .map_err(|e| PyErr::new::<FinchError, _>(format!("{}", e)))?
         };
         Ok(Multisketch { ms: ms })
     }
-
 
     // TODO: save method
 
@@ -74,7 +71,7 @@ impl Multisketch {
     fn get_sketch_size(&self) -> PyResult<u32> {
         Ok(self.ms.sketchSize)
     }
-    
+
     #[getter]
     fn get_hash_type(&self) -> PyResult<String> {
         Ok(self.ms.hashType.clone())
@@ -93,7 +90,12 @@ impl Multisketch {
     #[getter]
     fn get_sketches(&self) -> PyResult<Vec<Sketch>> {
         // TODO: we should be doing this without a clone probably?
-        Ok(self.ms.sketches.iter().map(|s| Sketch { s: s.clone() }).collect())
+        Ok(self
+            .ms
+            .sketches
+            .iter()
+            .map(|s| Sketch { s: s.clone() })
+            .collect())
     }
 }
 
@@ -127,15 +129,11 @@ pub struct Sketch {
 #[pymethods]
 impl Sketch {
     #[new]
-    #[args(length=0, n_kmers=0)]
-    fn __new__(obj: &PyRawObject, name: &str,  length: u64, n_kmers: u64) -> PyResult<()> {
+    #[args(length = 0, n_kmers = 0)]
+    fn __new__(obj: &PyRawObject, name: &str, length: u64, n_kmers: u64) -> PyResult<()> {
         // TODO: take a hashes parameter: Vec<(usize, &[u8], u16, u16)>,
         let sketch = SType::new(name, length, n_kmers, Vec::new(), &HashMap::new());
-        obj.init(|_| {
-            Sketch {
-                s: sketch
-            }
-        })
+        obj.init(|_| Sketch { s: sketch })
     }
 
     #[getter]
@@ -168,9 +166,13 @@ impl Sketch {
     fn get_hashes(&self) -> PyResult<Vec<(usize, Py<PyBytes>, u16, u16)>> {
         let gil = Python::acquire_gil();
         let py = gil.python();
-        Ok(self.s.hashes.clone().into_iter().map(|i| {
-            (i.hash, PyBytes::new(py, &i.kmer), i.count, i.extra_count)
-        }).collect())
+        Ok(self
+            .s
+            .hashes
+            .clone()
+            .into_iter()
+            .map(|i| (i.hash, PyBytes::new(py, &i.kmer), i.count, i.extra_count))
+            .collect())
     }
 
     // TODO: there are a lot of issues to fix in here; we should also try to destructure the
@@ -194,24 +196,19 @@ impl Sketch {
     // }
 
     // TODO: filtering method
-    
+
     // TODO: clip to n kmers/hashes method
-    
+
     // TODO: merge sketches method
 
     /// compare(sketch, mash_mode=False)
     ///
     /// Calculates the containment within and jaccard similarity to another sketch.
-    #[args(mash_mode=true)]
+    #[args(mash_mode = true)]
     pub fn compare(&self, sketch: &Sketch, mash_mode: bool) -> PyResult<(f64, f64)> {
-        let dist = distance(
-            &self.s.hashes,
-            &sketch.s.hashes,
-            &"",
-            &"",
-            mash_mode
-        ).map_err(|e| PyErr::new::<FinchError, _>(format!("{}", e)))?;
-            
+        let dist = distance(&self.s.hashes, &sketch.s.hashes, &"", &"", mash_mode)
+            .map_err(|e| PyErr::new::<FinchError, _>(format!("{}", e)))?;
+
         Ok((dist.containment, dist.jaccard))
     }
 
@@ -219,10 +216,7 @@ impl Sketch {
     ///
     ///
     pub fn compare_counts(&self, sketch: &Sketch) -> PyResult<(u64, u64, u64, u64, u64)> {
-        Ok(common_counts(
-            &self.s.hashes,
-            &sketch.s.hashes,
-        ))
+        Ok(common_counts(&self.s.hashes, &sketch.s.hashes))
     }
 
     // /// compare_matrix(*sketches)
@@ -232,13 +226,8 @@ impl Sketch {
     #[args(args = "*")]
     pub fn compare_matrix(&self, args: &PyTuple) -> PyResult<Py<PyArray2<u64>>> {
         let sketches: Vec<&Sketch> = args.extract()?;
-        let sketch_kmers: Vec<&[KmerCount]> = sketches.iter().map(|s| {
-            &s.s.hashes[..]
-        }).collect();
-        let result = minmer_matrix(
-            &self.s.hashes,
-            &sketch_kmers,
-        );
+        let sketch_kmers: Vec<&[KmerCount]> = sketches.iter().map(|s| &s.s.hashes[..]).collect();
+        let result = minmer_matrix(&self.s.hashes, &sketch_kmers);
 
         let gil = Python::acquire_gil();
         let py = gil.python();
@@ -279,7 +268,14 @@ impl PyMappingProtocol for Sketch {
 /// From the FASTA and FASTQ file paths, create a Multisketch.
 // #[pyfunction(n_hashes=null, kmer_length=21, filter=true, seed=0)]  // TODO: this doesn't work?
 #[pyfunction]
-pub fn sketch_files(filenames: Vec<&str>, n_hashes: usize, final_size: Option<usize>, kmer_length: u8, filter: bool, seed: u64) -> PyResult<Multisketch> {
+pub fn sketch_files(
+    filenames: Vec<&str>,
+    n_hashes: usize,
+    final_size: Option<usize>,
+    kmer_length: u8,
+    filter: bool,
+    seed: u64,
+) -> PyResult<Multisketch> {
     // TODO: allow more filter customization?
 
     // TODO: allow passing in a single file without the list
@@ -294,11 +290,19 @@ pub fn sketch_files(filenames: Vec<&str>, n_hashes: usize, final_size: Option<us
         None => n_hashes,
     };
 
-    Ok(Multisketch { ms: mash_files(&filenames, n_hashes, fsize, kmer_length, &mut filters, false, seed).map_err(|e|
-        PyErr::new::<FinchError, _>(format!("{}", e))
-    )? })
+    Ok(Multisketch {
+        ms: mash_files(
+            &filenames,
+            n_hashes,
+            fsize,
+            kmer_length,
+            &mut filters,
+            false,
+            seed,
+        )
+        .map_err(|e| PyErr::new::<FinchError, _>(format!("{}", e)))?,
+    })
 }
-
 
 #[pymodinit]
 /// Finch is a MinHash sketch processing library.

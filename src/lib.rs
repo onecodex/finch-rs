@@ -2,31 +2,40 @@
 
 #[cfg(feature = "mash_format")]
 extern crate capnp;
-#[macro_use] extern crate serde_derive;
+#[macro_use]
+extern crate serde_derive;
 
+use failure::{bail, format_err, Error};
+use needletail::fastx::{fastx_cli, fastx_stream};
 use std::io::{Read, Seek};
 use std::path::Path;
 use std::result::Result as StdResult;
-use failure::{Error, bail, format_err};
-use needletail::fastx::{fastx_cli, fastx_stream};
 
-use crate::filtering::{FilterParams, filter_sketch};
+use crate::filtering::{filter_sketch, FilterParams};
 use crate::minhashes::MinHashKmers;
-use crate::serialization::{Sketch, MultiSketch};
+use crate::serialization::{MultiSketch, Sketch};
 
-pub mod minhashes;
-pub mod filtering;
 pub mod distance;
-pub mod serialization;
-pub mod statistics;
+pub mod filtering;
 #[cfg(feature = "mash_format")]
 mod mash_capnp;
+pub mod minhashes;
 #[cfg(feature = "python")]
 pub mod python;
+pub mod serialization;
+pub mod statistics;
 
 pub type Result<T> = StdResult<T, Error>;
 
-pub fn mash_files(filenames: &[&str], n_hashes: usize, final_size: usize, kmer_length: u8, filters: &mut FilterParams, no_strict: bool, seed: u64) -> Result<MultiSketch> {
+pub fn mash_files(
+    filenames: &[&str],
+    n_hashes: usize,
+    final_size: usize,
+    kmer_length: u8,
+    filters: &mut FilterParams,
+    no_strict: bool,
+    seed: u64,
+) -> Result<MultiSketch> {
     let mut sketches = Vec::with_capacity(filenames.len());
     for filename in filenames {
         let mut seq_len = 0u64;
@@ -37,7 +46,7 @@ pub fn mash_files(filenames: &[&str], n_hashes: usize, final_size: usize, kmer_l
         };
         fastx_cli(
             path.to_str()
-                .ok_or(format_err!("Couldn't make path into string"))?,
+                .ok_or_else(|| format_err!("Couldn't make path into string"))?,
             |seq_type| {
                 // disable filtering for FASTA files unless it was explicitly specified
                 if filters.filter_on.is_none() {
@@ -63,13 +72,26 @@ pub fn mash_files(filenames: &[&str], n_hashes: usize, final_size: usize, kmer_l
         let (mut filtered_hashes, filter_stats) = filter_sketch(&hashes, &filters);
         filtered_hashes.truncate(final_size);
         if !no_strict && filtered_hashes.len() < final_size {
-            bail!("{} had too few kmers ({}) to sketch", filename, filtered_hashes.len());
+            bail!(
+                "{} had too few kmers ({}) to sketch",
+                filename,
+                filtered_hashes.len()
+            );
         }
 
         // directory should be clipped from filename
-        let basename = path.file_name().ok_or(format_err!("Couldn't get filename from path"))?;
-        let sketch = Sketch::new(basename.to_str().ok_or(format_err!("Couldn't make filename into string"))?,
-                                     seq_len, n_kmers, filtered_hashes, &filter_stats);
+        let basename = path
+            .file_name()
+            .ok_or_else(|| format_err!("Couldn't get filename from path"))?;
+        let sketch = Sketch::new(
+            basename
+                .to_str()
+                .ok_or_else(|| format_err!("Couldn't make filename into string"))?,
+            seq_len,
+            n_kmers,
+            filtered_hashes,
+            &filter_stats,
+        );
         sketches.push(sketch);
     }
     Ok(MultiSketch {
@@ -85,9 +107,16 @@ pub fn mash_files(filenames: &[&str], n_hashes: usize, final_size: usize, kmer_l
     })
 }
 
-
-pub fn mash_stream<R>(reader: R, n_hashes: usize, final_size: usize, kmer_length: u8,
-                      filters: &mut FilterParams, no_strict: bool, seed: u64) -> Result<Sketch> where
+pub fn mash_stream<R>(
+    reader: R,
+    n_hashes: usize,
+    final_size: usize,
+    kmer_length: u8,
+    filters: &mut FilterParams,
+    no_strict: bool,
+    seed: u64,
+) -> Result<Sketch>
+where
     R: Read + Seek,
 {
     let mut seq_len = 0u64;
@@ -106,13 +135,16 @@ pub fn mash_stream<R>(reader: R, n_hashes: usize, final_size: usize, kmer_length
                     _ => panic!("Unknown sequence type"),
                 };
             }
-        }, |seq| {
+        },
+        |seq| {
             seq_len += seq.seq.len() as u64;
             for (_, kmer, is_rev_complement) in seq.normalize(false).kmers(kmer_length, true) {
                 let rc_count = if is_rev_complement { 1u8 } else { 0u8 };
                 minhash.push(kmer, rc_count);
             }
-        }).map_err(|e| format_err!("{}", e.to_string()))?;
+        },
+    )
+    .map_err(|e| format_err!("{}", e.to_string()))?;
 
     let n_kmers = minhash.total_kmers() as u64;
     let hashes = minhash.into_vec();
@@ -125,5 +157,11 @@ pub fn mash_stream<R>(reader: R, n_hashes: usize, final_size: usize, kmer_length
         );
     }
 
-        Ok(Sketch::new("", seq_len, n_kmers, filtered_hashes, &filter_stats))
+    Ok(Sketch::new(
+        "",
+        seq_len,
+        n_kmers,
+        filtered_hashes,
+        &filter_stats,
+    ))
 }

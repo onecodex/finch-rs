@@ -4,7 +4,6 @@ use std::collections::HashMap;
 use crate::minhashes::KmerCount;
 use crate::statistics::hist;
 
-
 /// Used to pass around filter options for sketching
 #[derive(Debug)]
 pub struct FilterParams {
@@ -15,8 +14,13 @@ pub struct FilterParams {
 }
 
 /// Applies filter options to a sketch
-pub fn filter_sketch(hashes: &[KmerCount], filters: &FilterParams) -> (Vec<KmerCount>, HashMap<String, String>) {
-    let filter_on = filters.filter_on.expect("Sorry! Filter should have either been passed or set during detection");
+pub fn filter_sketch(
+    hashes: &[KmerCount],
+    filters: &FilterParams,
+) -> (Vec<KmerCount>, HashMap<String, String>) {
+    let filter_on = filters
+        .filter_on
+        .expect("Sorry! Filter should have either been passed or set during detection");
     let mut filter_stats: HashMap<String, String> = HashMap::new();
 
     let mut low_abun_filter = filters.abun_filter.0;
@@ -24,7 +28,10 @@ pub fn filter_sketch(hashes: &[KmerCount], filters: &FilterParams) -> (Vec<KmerC
 
     if filter_on && filters.strand_filter > 0f32 {
         filtered_hashes = filter_strands(&filtered_hashes, filters.strand_filter);
-        filter_stats.insert(String::from("strandFilter"), filters.strand_filter.to_string());
+        filter_stats.insert(
+            String::from("strandFilter"),
+            filters.strand_filter.to_string(),
+        );
     }
 
     if filter_on && filters.err_filter > 0f32 {
@@ -36,7 +43,8 @@ pub fn filter_sketch(hashes: &[KmerCount], filters: &FilterParams) -> (Vec<KmerC
     }
 
     if filter_on && (low_abun_filter != None || filters.abun_filter.1 != None) {
-        filtered_hashes = filter_abundance(&filtered_hashes, low_abun_filter, filters.abun_filter.1);
+        filtered_hashes =
+            filter_abundance(&filtered_hashes, low_abun_filter, filters.abun_filter.1);
         if let Some(v) = low_abun_filter {
             filter_stats.insert(String::from("minCopies"), v.to_string());
         }
@@ -48,14 +56,17 @@ pub fn filter_sketch(hashes: &[KmerCount], filters: &FilterParams) -> (Vec<KmerC
     (filtered_hashes, filter_stats)
 }
 
-
 /// Determines a dynamic filtering threshold for low abundance kmers
 ///
 /// Useful for removing, e.g. kmers containing sequencing errors
 ///
 pub fn guess_filter_threshold(sketch: &[KmerCount], filter_level: f32) -> u16 {
     let hist_data = hist(sketch);
-    let total_counts = hist_data.iter().enumerate().map(|t| (t.0 as u64 + 1) * t.1).sum::<u64>() as f32;
+    let total_counts = hist_data
+        .iter()
+        .enumerate()
+        .map(|t| (t.0 as u64 + 1) * t.1)
+        .sum::<u64>() as f32;
     let cutoff_amt = filter_level * total_counts;
 
     // calculate the coverage that N% of the weighted data is above
@@ -96,47 +107,113 @@ fn test_guess_filter_threshold() {
     let cutoff = guess_filter_threshold(&sketch, 0.2);
     assert_eq!(cutoff, 1);
 
+    let sketch = vec![KmerCount {
+        hash: 1,
+        kmer: vec![],
+        count: 1,
+        extra_count: 0,
+    }];
+    let cutoff = guess_filter_threshold(&sketch, 0.2);
+    assert_eq!(cutoff, 1);
+
     let sketch = vec![
-        KmerCount {hash: 1, kmer: vec![], count: 1, extra_count: 0},
+        KmerCount {
+            hash: 1,
+            kmer: vec![],
+            count: 1,
+            extra_count: 0,
+        },
+        KmerCount {
+            hash: 2,
+            kmer: vec![],
+            count: 1,
+            extra_count: 0,
+        },
     ];
     let cutoff = guess_filter_threshold(&sketch, 0.2);
     assert_eq!(cutoff, 1);
 
     let sketch = vec![
-        KmerCount {hash: 1, kmer: vec![], count: 1, extra_count: 0},
-        KmerCount {hash: 2, kmer: vec![], count: 1, extra_count: 0},
-    ];
-    let cutoff = guess_filter_threshold(&sketch, 0.2);
-    assert_eq!(cutoff, 1);
-
-    let sketch = vec![
-        KmerCount {hash: 1, kmer: vec![], count: 1, extra_count: 0},
-        KmerCount {hash: 2, kmer: vec![], count: 9, extra_count: 0},
+        KmerCount {
+            hash: 1,
+            kmer: vec![],
+            count: 1,
+            extra_count: 0,
+        },
+        KmerCount {
+            hash: 2,
+            kmer: vec![],
+            count: 9,
+            extra_count: 0,
+        },
     ];
     let cutoff = guess_filter_threshold(&sketch, 0.2);
     assert_eq!(cutoff, 8);
 
     let sketch = vec![
-        KmerCount {hash: 1, kmer: vec![], count: 1, extra_count: 0},
-        KmerCount {hash: 2, kmer: vec![], count: 10, extra_count: 0},
-        KmerCount {hash: 3, kmer: vec![], count: 10, extra_count: 0},
-        KmerCount {hash: 4, kmer: vec![], count: 9, extra_count: 0},
+        KmerCount {
+            hash: 1,
+            kmer: vec![],
+            count: 1,
+            extra_count: 0,
+        },
+        KmerCount {
+            hash: 2,
+            kmer: vec![],
+            count: 10,
+            extra_count: 0,
+        },
+        KmerCount {
+            hash: 3,
+            kmer: vec![],
+            count: 10,
+            extra_count: 0,
+        },
+        KmerCount {
+            hash: 4,
+            kmer: vec![],
+            count: 9,
+            extra_count: 0,
+        },
     ];
     let cutoff = guess_filter_threshold(&sketch, 0.1);
     assert_eq!(cutoff, 8);
 
     let sketch = vec![
-        KmerCount {hash: 1, kmer: vec![], count: 1, extra_count: 0},
-        KmerCount {hash: 2, kmer: vec![], count: 1, extra_count: 0},
-        KmerCount {hash: 3, kmer: vec![], count: 2, extra_count: 0},
-        KmerCount {hash: 4, kmer: vec![], count: 4, extra_count: 0},
+        KmerCount {
+            hash: 1,
+            kmer: vec![],
+            count: 1,
+            extra_count: 0,
+        },
+        KmerCount {
+            hash: 2,
+            kmer: vec![],
+            count: 1,
+            extra_count: 0,
+        },
+        KmerCount {
+            hash: 3,
+            kmer: vec![],
+            count: 2,
+            extra_count: 0,
+        },
+        KmerCount {
+            hash: 4,
+            kmer: vec![],
+            count: 4,
+            extra_count: 0,
+        },
     ];
     let cutoff = guess_filter_threshold(&sketch, 0.1);
     assert_eq!(cutoff, 1);
 }
 
-
-pub fn filter_abundance(sketch: &[KmerCount], low: Option<u16>, high: Option<u16>) -> Vec<KmerCount> {
+pub fn filter_abundance(
+    sketch: &[KmerCount],
+    low: Option<u16>,
+    high: Option<u16>,
+) -> Vec<KmerCount> {
     let mut filtered = Vec::new();
     let lo_threshold = low.unwrap_or(0u16);
     let hi_threshold = high.unwrap_or(u16::max_value());
@@ -151,8 +228,18 @@ pub fn filter_abundance(sketch: &[KmerCount], low: Option<u16>, high: Option<u16
 #[test]
 fn test_filter_abundance() {
     let sketch = vec![
-        KmerCount {hash: 1, kmer: vec![], count: 1, extra_count: 0},
-        KmerCount {hash: 2, kmer: vec![], count: 1, extra_count: 0},
+        KmerCount {
+            hash: 1,
+            kmer: vec![],
+            count: 1,
+            extra_count: 0,
+        },
+        KmerCount {
+            hash: 2,
+            kmer: vec![],
+            count: 1,
+            extra_count: 0,
+        },
     ];
     let filtered = filter_abundance(&sketch, Some(1), None);
     assert_eq!(filtered.len(), 2);
@@ -160,10 +247,30 @@ fn test_filter_abundance() {
     assert_eq!(filtered[1].hash, 2);
 
     let sketch = vec![
-        KmerCount {hash: 1, kmer: vec![], count: 1, extra_count: 0},
-        KmerCount {hash: 2, kmer: vec![], count: 10, extra_count: 0},
-        KmerCount {hash: 3, kmer: vec![], count: 10, extra_count: 0},
-        KmerCount {hash: 4, kmer: vec![], count: 9, extra_count: 0},
+        KmerCount {
+            hash: 1,
+            kmer: vec![],
+            count: 1,
+            extra_count: 0,
+        },
+        KmerCount {
+            hash: 2,
+            kmer: vec![],
+            count: 10,
+            extra_count: 0,
+        },
+        KmerCount {
+            hash: 3,
+            kmer: vec![],
+            count: 10,
+            extra_count: 0,
+        },
+        KmerCount {
+            hash: 4,
+            kmer: vec![],
+            count: 9,
+            extra_count: 0,
+        },
     ];
     let filtered = filter_abundance(&sketch, Some(9), None);
     assert_eq!(filtered.len(), 3);
@@ -175,7 +282,6 @@ fn test_filter_abundance() {
     assert_eq!(filtered.len(), 1);
     assert_eq!(filtered[0].hash, 4);
 }
-
 
 /// Filter out kmers that have a large abundance difference between being seen in the
 /// "forward" and "reverse" orientations (picked arbitrarily which is which).
@@ -202,14 +308,33 @@ pub fn filter_strands(sketch: &[KmerCount], ratio_cutoff: f32) -> Vec<KmerCount>
     filtered
 }
 
-
 #[test]
 fn test_filter_strands() {
     let sketch = vec![
-        KmerCount {hash: 1, kmer: vec![], count: 10, extra_count: 1},
-        KmerCount {hash: 2, kmer: vec![], count: 10, extra_count: 2},
-        KmerCount {hash: 3, kmer: vec![], count: 10, extra_count: 8},
-        KmerCount {hash: 4, kmer: vec![], count: 10, extra_count: 9},
+        KmerCount {
+            hash: 1,
+            kmer: vec![],
+            count: 10,
+            extra_count: 1,
+        },
+        KmerCount {
+            hash: 2,
+            kmer: vec![],
+            count: 10,
+            extra_count: 2,
+        },
+        KmerCount {
+            hash: 3,
+            kmer: vec![],
+            count: 10,
+            extra_count: 8,
+        },
+        KmerCount {
+            hash: 4,
+            kmer: vec![],
+            count: 10,
+            extra_count: 9,
+        },
     ];
     let filtered = filter_strands(&sketch, 0.15);
     assert_eq!(filtered.len(), 4);
@@ -217,10 +342,30 @@ fn test_filter_strands() {
     assert_eq!(filtered[3].hash, 4);
 
     let sketch = vec![
-        KmerCount {hash: 1, kmer: vec![], count: 16, extra_count: 1},
-        KmerCount {hash: 2, kmer: vec![], count: 16, extra_count: 2},
-        KmerCount {hash: 3, kmer: vec![], count: 16, extra_count: 8},
-        KmerCount {hash: 4, kmer: vec![], count: 16, extra_count: 9},
+        KmerCount {
+            hash: 1,
+            kmer: vec![],
+            count: 16,
+            extra_count: 1,
+        },
+        KmerCount {
+            hash: 2,
+            kmer: vec![],
+            count: 16,
+            extra_count: 2,
+        },
+        KmerCount {
+            hash: 3,
+            kmer: vec![],
+            count: 16,
+            extra_count: 8,
+        },
+        KmerCount {
+            hash: 4,
+            kmer: vec![],
+            count: 16,
+            extra_count: 9,
+        },
     ];
     let filtered = filter_strands(&sketch, 0.15);
     assert_eq!(filtered.len(), 2);
