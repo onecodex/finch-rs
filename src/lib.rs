@@ -30,34 +30,35 @@ pub fn mash_files(filenames: &[&str], n_hashes: usize, final_size: usize, kmer_l
     let mut sketches = Vec::with_capacity(filenames.len());
     for filename in filenames {
         let mut seq_len = 0u64;
-        let mut n_kmers = 0u64;
         let path = Path::new(filename);
         let mut minhash = match filters.filter_on {
             Some(true) | None => MinHashKmers::new(n_hashes, seed),
             Some(false) => MinHashKmers::new(final_size, seed),
         };
-        fastx_cli(path.to_str().ok_or(format_err!("Couldn't make path into string"))?, |seq_type| {
-            // disable filtering for FASTA files unless it was explicitly specified
-            if filters.filter_on.is_none() {
-                filters.filter_on = match seq_type {
-                    "FASTA" => Some(false),
-                    "FASTQ" => Some(true),
-                    _ => panic!("Unknown sequence type"),
-                };
-            }
-        }, |seq| {
-            seq_len += seq.seq.len() as u64;
-            for (_, kmer, is_rev_complement) in seq.normalize(false).kmers(kmer_length, true) {
-                let rc_count = if is_rev_complement {
-                    1u8
-                } else {
-                    0u8
-                };
-                n_kmers += 1;
-                minhash.push(kmer, rc_count);
-            }
-        }).map_err(|e| format_err!("{}", e.to_string()))?;
+        fastx_cli(
+            path.to_str()
+                .ok_or(format_err!("Couldn't make path into string"))?,
+            |seq_type| {
+                // disable filtering for FASTA files unless it was explicitly specified
+                if filters.filter_on.is_none() {
+                    filters.filter_on = match seq_type {
+                        "FASTA" => Some(false),
+                        "FASTQ" => Some(true),
+                        _ => panic!("Unknown sequence type"),
+                    };
+                }
+            },
+            |seq| {
+                seq_len += seq.seq.len() as u64;
+                for (_, kmer, is_rev_complement) in seq.normalize(false).kmers(kmer_length, true) {
+                    let rc_count = if is_rev_complement { 1u8 } else { 0u8 };
+                    minhash.push(kmer, rc_count);
+                }
+            },
+        )
+        .map_err(|e| format_err!("{}", e.to_string()))?;
 
+        let n_kmers = minhash.total_kmers() as u64;
         let hashes = minhash.into_vec();
         let (mut filtered_hashes, filter_stats) = filter_sketch(&hashes, &filters);
         filtered_hashes.truncate(final_size);
@@ -89,13 +90,14 @@ pub fn mash_stream<R>(reader: R, n_hashes: usize, final_size: usize, kmer_length
                       filters: &mut FilterParams, no_strict: bool, seed: u64) -> Result<Sketch> where
     R: Read + Seek,
 {
-        let mut seq_len = 0u64;
-        let mut n_kmers = 0u64;
-        let mut minhash = match filters.filter_on {
-            Some(true) | None => MinHashKmers::new(n_hashes, seed),
-            Some(false) => MinHashKmers::new(final_size, seed),
-        };
-        fastx_stream(reader, |seq_type| {
+    let mut seq_len = 0u64;
+    let mut minhash = match filters.filter_on {
+        Some(true) | None => MinHashKmers::new(n_hashes, seed),
+        Some(false) => MinHashKmers::new(final_size, seed),
+    };
+    fastx_stream(
+        reader,
+        |seq_type| {
             // disable filtering for FASTA files unless it was explicitly specified
             if filters.filter_on.is_none() {
                 filters.filter_on = match seq_type {
@@ -107,22 +109,21 @@ pub fn mash_stream<R>(reader: R, n_hashes: usize, final_size: usize, kmer_length
         }, |seq| {
             seq_len += seq.seq.len() as u64;
             for (_, kmer, is_rev_complement) in seq.normalize(false).kmers(kmer_length, true) {
-                let rc_count = if is_rev_complement {
-                    1u8
-                } else {
-                    0u8
-                };
-                n_kmers += 1;
+                let rc_count = if is_rev_complement { 1u8 } else { 0u8 };
                 minhash.push(kmer, rc_count);
             }
         }).map_err(|e| format_err!("{}", e.to_string()))?;
 
-        let hashes = minhash.into_vec();
-        let (mut filtered_hashes, filter_stats) = filter_sketch(&hashes, &filters);
-        filtered_hashes.truncate(final_size);
-        if !no_strict && filtered_hashes.len() < final_size {
-            bail!("Stream had too few kmers ({}) to sketch", filtered_hashes.len());
-        }
+    let n_kmers = minhash.total_kmers() as u64;
+    let hashes = minhash.into_vec();
+    let (mut filtered_hashes, filter_stats) = filter_sketch(&hashes, &filters);
+    filtered_hashes.truncate(final_size);
+    if !no_strict && filtered_hashes.len() < final_size {
+        bail!(
+            "Stream had too few kmers ({}) to sketch",
+            filtered_hashes.len()
+        );
+    }
 
         Ok(Sketch::new("", seq_len, n_kmers, filtered_hashes, &filter_stats))
 }

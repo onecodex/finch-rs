@@ -218,10 +218,10 @@ pub fn write_mash_file(mut file: &mut Write, sketches: &MultiSketch) -> FinchRes
     Ok(())
 }
 
-
 #[cfg(feature = "mash_format")]
 pub fn read_mash_file(mut file: &mut BufRead) -> FinchResult<MultiSketch> {
-    let reader = capnp_serialize::read_message(&mut file, message::ReaderOptions::new())?;
+    let options = *message::ReaderOptions::new().traversal_limit_in_words(64 * 1024 * 1024);
+    let reader = capnp_serialize::read_message(&mut file, options)?;
     let mash_data: min_hash::Reader = reader.get_root::<min_hash::Reader>()?;
 
     let mut sketches = MultiSketch {

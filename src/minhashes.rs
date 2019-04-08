@@ -76,12 +76,11 @@ pub struct KmerCount {
     pub extra_count: u16,
 }
 
-
 #[derive(Clone)]
 pub struct MinHashKmers {
     hashes: BinaryHeap<HashedItem<Vec<u8>>>,
     counts: HashMap<ItemHash, (u16, u16), BuildHasherDefault<NoHashHasher>>,
-    total_count: u64,
+    total_kmers: u64,
     size: usize,
     seed: u64,
     // heap_lock: Mutex<()>,
@@ -94,7 +93,7 @@ impl MinHashKmers {
         MinHashKmers {
             hashes: BinaryHeap::with_capacity(size + 1),
             counts: HashMap::with_capacity_and_hasher(size, BuildHasherDefault::default()),
-            total_count: 0,
+            total_kmers: 0,
             size,
             seed,
             // heap_lock: Mutex::new(()),
@@ -103,6 +102,7 @@ impl MinHashKmers {
     }
 
     pub fn push(&mut self, kmer: &[u8], extra_count: u8) {
+        self.total_kmers += 1;
         let new_hash = hash_f(kmer, self.seed);
         let add_hash = match self.hashes.peek() {
             None => true,
@@ -110,7 +110,6 @@ impl MinHashKmers {
         };
 
         if add_hash {
-            self.total_count += 1;
             if self.counts.contains_key(&new_hash) {
                 // let _lock = self.map_lock.lock().unwrap();
                 let count = self.counts.entry(new_hash).or_insert((0u16, 0u16));
@@ -127,9 +126,7 @@ impl MinHashKmers {
                 self.counts.insert(new_hash, (1u16, u16::from(extra_count)));
                 if self.hashes.len() > self.size {
                     let hash = self.hashes.pop().unwrap();
-                    let old_count = self.counts.remove(&hash.hash).unwrap().0;
-                    // TODO: check if old_count / total_count > ...?
-                    self.total_count -= u64::from(old_count);
+                    let _ = self.counts.remove(&hash.hash).unwrap();
                 }
                 // drop(_lock);
                 // drop(_map_lock);
@@ -138,7 +135,7 @@ impl MinHashKmers {
     }
 
     pub fn total_kmers(&self) -> usize {
-        self.total_count as usize
+        self.total_kmers as usize
     }
 
     pub fn into_vec(self) -> Vec<KmerCount> {
