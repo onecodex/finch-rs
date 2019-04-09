@@ -1,6 +1,6 @@
 [package]
 name = "finch"
-version = "0.1.9"
+version = "0.2.0"
 authors = ["Roderick Bovee & One Codex <roderick@onecodex.com>"]
 description = "An implementation of min-wise independent permutation locality sensitive hashing ('MinHashing') for genomic data and command-line utility for manipulation."
 keywords = ["minhash", "bioinformatics", "sketches"]
@@ -8,13 +8,17 @@ categories = ["command-line-utilities", "science"]
 repository = "https://github.com/onecodex/finch-rs"
 license = "MIT"
 readme = "./README.md"
+edition = "2018"
 
 [dependencies]
-capnp = { version = "0.8.17", optional = true}
+capnp = { version = "0.9.4", optional = true}
 clap = "~2.32.0"
 failure = "0.1.2"
 murmurhash3 = "~0.0.5"
+ndarray = "0.12"
 needletail = "0.2.2"
+numpy = { version = "0.4.1", optional = true }
+pyo3 = { version = "0.5.3", optional = true }
 serde = "1.0.72"
 serde_derive = "1.0.72"
 serde_json = "1.0.26"
@@ -22,3 +26,7 @@ serde_json = "1.0.26"
 [features]
 default = ["mash_format"]
 mash_format = ["capnp"]
+python = ["numpy", "pyo3"]
+
+[lib]
+crate-type=["cdylib", "rlib"]
