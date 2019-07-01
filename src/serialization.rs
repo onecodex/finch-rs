@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::io::{BufRead, Write};
+use std::mem;
 
 #[cfg(feature = "mash_format")]
 use capnp::message;
@@ -86,21 +87,19 @@ impl<'de> Deserialize<'de> for Sketch {
             counts: Option<Vec<u16>>,
         }
 
-        let jsketch = JSONSketch::deserialize(deserializer)?;
+        let mut jsketch = JSONSketch::deserialize(deserializer)?;
 
         let mut kmercount_list = Vec::with_capacity(jsketch.hashes.len());
         for i in 0..jsketch.hashes.len() {
             let hash = jsketch.hashes[i].0;
-            let kmer;
-            match jsketch.kmers {
-                Some(ref v) => kmer = v[i].clone().into_bytes(),
-                None => kmer = Vec::new(), // TODO: this might be slow?
-            }
-            let count;
-            match jsketch.counts {
-                Some(ref v) => count = v[i],
-                None => count = 1,
-            }
+            let kmer = match &mut jsketch.kmers {
+                Some(v) => mem::replace(&mut v[i], String::new()).into_bytes(),
+                None => Vec::new(),
+            };
+            let count = match &jsketch.counts {
+                Some(v) => v[i],
+                None => 1,
+            };
             kmercount_list.push(KmerCount {
                 hash,
                 kmer,
