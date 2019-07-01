@@ -1,11 +1,12 @@
 use std::collections::HashMap;
+use std::fmt;
 use std::io::{BufRead, Write};
 
 #[cfg(feature = "mash_format")]
 use capnp::message;
 #[cfg(feature = "mash_format")]
 use capnp::serialize as capnp_serialize;
-use serde::de::{Deserialize, Deserializer};
+use serde::de::{self, Deserialize, Deserializer, Visitor};
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 
 use crate::filtering::{filter_sketch, FilterParams};
@@ -73,14 +74,14 @@ impl<'de> Deserialize<'de> for Sketch {
         D: Deserializer<'de>,
     {
         #[allow(non_snake_case)]
-        #[derive(Debug, Deserialize)]
+        #[derive(Deserialize)]
         struct JSONSketch {
             pub name: String,
             pub seqLength: Option<u64>,
             pub numValidKmers: Option<u64>,
             pub comment: Option<String>,
             pub filters: Option<HashMap<String, String>>,
-            hashes: Vec<String>,
+            hashes: Vec<QuotedUsize>,
             kmers: Option<Vec<String>>,
             counts: Option<Vec<u16>>,
         }
@@ -89,11 +90,7 @@ impl<'de> Deserialize<'de> for Sketch {
 
         let mut kmercount_list = Vec::with_capacity(jsketch.hashes.len());
         for i in 0..jsketch.hashes.len() {
-            let hash;
-            match jsketch.hashes[i].parse::<usize>() {
-                Ok(t) => hash = t,
-                Err(_) => break,
-            }
+            let hash = jsketch.hashes[i].0;
             let kmer;
             match jsketch.kmers {
                 Some(ref v) => kmer = v[i].clone().into_bytes(),
@@ -302,4 +299,32 @@ pub fn write_mash_file(mut file: &mut Write, sketches: &MultiSketch) -> FinchRes
 #[cfg(not(feature = "mash_format"))]
 pub fn read_mash_file(mut file: &mut BufRead) -> FinchResult<MultiSketch> {
     bail!("Finch wasn't compiled with Mash format support")
+}
+
+struct QuotedUsize(usize);
+
+impl<'de> Deserialize<'de> for QuotedUsize {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct QuotedUsizeVisitor;
+
+        impl<'de> Visitor<'de> for QuotedUsizeVisitor {
+            type Value = QuotedUsize;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("usize as a json string")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                value.parse().map(QuotedUsize).map_err(de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_str(QuotedUsizeVisitor)
+    }
 }
