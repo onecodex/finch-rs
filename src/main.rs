@@ -11,6 +11,7 @@ use std::io::{stderr, stdout, BufReader, Write};
 use std::process::exit;
 
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
+use memmap::MmapOptions;
 
 use finch::distance::distance;
 use finch::filtering::FilterParams;
@@ -590,11 +591,12 @@ fn open_mash_file(
 
     // otherwise we just open the file and return the sketches
     let file = File::open(filename).map_err(|_| format_err!("Error opening {}", &filename))?;
-    let mut buf_reader = BufReader::new(file);
     let mut json: MultiSketch = if filename.ends_with(MASH_EXT) {
+        let mut buf_reader = BufReader::new(file);
         read_mash_file(&mut buf_reader)?
     } else {
-        serde_json::from_reader(buf_reader)
+        let mapped = unsafe { MmapOptions::new().map(&file)? };
+        serde_json::from_slice(&mapped)
             .map_err(|_| format_err!("Error parsing {}", &filename))?
     };
 
