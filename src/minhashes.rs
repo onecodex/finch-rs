@@ -93,6 +93,7 @@ impl MinHashKmers {
         }
     }
 
+    #[allow(clippy::map_entry)]
     pub fn push(&mut self, kmer: &[u8], extra_count: u8) {
         self.total_kmers += 1;
         let new_hash = hash_f(kmer, self.seed);
