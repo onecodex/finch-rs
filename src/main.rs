@@ -43,7 +43,7 @@ macro_rules! add_output_options {
 
 fn output_to<F>(output_fn: F, matches: &ArgMatches, extension: &str) -> Result<()>
 where
-    F: Fn(&mut Write) -> Result<()>,
+    F: Fn(&mut dyn Write) -> Result<()>,
 {
     let output = matches.value_of("output_file");
     match output {
@@ -596,8 +596,7 @@ fn open_mash_file(
         read_mash_file(&mut buf_reader)?
     } else {
         let mapped = unsafe { MmapOptions::new().map(&file)? };
-        serde_json::from_slice(&mapped)
-            .map_err(|_| format_err!("Error parsing {}", &filename))?
+        serde_json::from_slice(&mapped).map_err(|_| format_err!("Error parsing {}", &filename))?
     };
 
     // if filtering is explicitly set, re-filter the hashes
