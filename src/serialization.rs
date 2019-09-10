@@ -237,7 +237,7 @@ pub fn read_mash_file(mut file: &mut dyn BufRead) -> FinchResult<MultiSketch> {
         sketchSize: 0,
         hashType: String::from("MurmurHash3_x64_128"),
         hashBits: 64u16,
-        hashSeed: u64::from(mash_data.get_kmer_size()),
+        hashSeed: u64::from(mash_data.get_hash_seed()),
         sketches: Vec::new(),
     };
 
