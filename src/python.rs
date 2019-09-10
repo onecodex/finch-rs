@@ -10,8 +10,8 @@ use pyo3::{py_exception, wrap_function};
 
 use crate::distance::{common_counts, distance, minmer_matrix};
 use crate::filtering::FilterParams;
+use crate::hash_schemes::KmerCount;
 use crate::mash_files;
-use crate::minhashes::KmerCount;
 use crate::serialization::{read_mash_file, MultiSketch as MSType, Sketch as SType, MASH_EXT};
 
 py_exception!(finch, FinchError, pyo3::exceptions::Exception);

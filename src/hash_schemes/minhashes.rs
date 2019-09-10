@@ -4,19 +4,19 @@ use std::hash::{BuildHasherDefault, Hasher};
 use std::usize;
 
 use murmurhash3::murmurhash3_x64_128;
+use needletail::{Sequence, SequenceRecord};
 
-// The individual items to store in the BinaryHeap
-pub type ItemHash = usize;
+use crate::hash_schemes::{HashScheme, ItemHash, KmerCount};
 
 #[inline]
 pub fn hash_f(item: &[u8], seed: u64) -> ItemHash {
-    murmurhash3_x64_128(item, seed).0 as ItemHash
+    murmurhash3_x64_128(item, seed).0
 }
 
 #[derive(Debug, Clone)]
-struct HashedItem<T> {
-    hash: ItemHash,
-    item: T,
+pub(crate) struct HashedItem<T> {
+    pub(crate) hash: ItemHash,
+    pub(crate) item: T,
 }
 
 impl<T> PartialEq for HashedItem<T> {
@@ -65,28 +65,22 @@ impl Hasher for NoHashHasher {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Hash, Serialize)]
-pub struct KmerCount {
-    pub hash: ItemHash,
-    pub kmer: Vec<u8>,
-    pub count: u16,
-    pub extra_count: u16,
-}
-
 #[derive(Clone)]
 pub struct MinHashKmers {
     hashes: BinaryHeap<HashedItem<Vec<u8>>>,
     counts: HashMap<ItemHash, (u16, u16), BuildHasherDefault<NoHashHasher>>,
+    kmer_length: u8,
     total_kmers: u64,
     size: usize,
     seed: u64,
 }
 
 impl MinHashKmers {
-    pub fn new(size: usize, seed: u64) -> Self {
+    pub fn new(size: usize, kmer_length: u8, seed: u64) -> Self {
         MinHashKmers {
             hashes: BinaryHeap::with_capacity(size + 1),
             counts: HashMap::with_capacity_and_hasher(size, BuildHasherDefault::default()),
+            kmer_length,
             total_kmers: 0,
             size,
             seed,
@@ -122,12 +116,24 @@ impl MinHashKmers {
             }
         }
     }
+}
 
-    pub fn total_kmers(&self) -> usize {
+impl HashScheme for MinHashKmers {
+    fn process(&mut self, seq: SequenceRecord) {
+        let rc = seq.reverse_complement();
+        for (_, kmer, is_rev_complement) in
+            seq.normalize(false).canonical_kmers(self.kmer_length, &rc)
+        {
+            let rc_count = if is_rev_complement { 1u8 } else { 0u8 };
+            self.push(kmer, rc_count);
+        }
+    }
+
+    fn total_kmers(&self) -> usize {
         self.total_kmers as usize
     }
 
-    pub fn into_vec(self) -> Vec<KmerCount> {
+    fn into_vec(self) -> Vec<KmerCount> {
         let mut vec = self.hashes.into_sorted_vec();
 
         let mut results = Vec::with_capacity(vec.len());
@@ -147,7 +153,7 @@ impl MinHashKmers {
 
 #[test]
 fn test_minhashkmers() {
-    let mut queue = MinHashKmers::new(3, 42);
+    let mut queue = MinHashKmers::new(3, 2, 42);
     queue.push(b"ca", 0);
     queue.push(b"cc", 1);
     queue.push(b"ac", 0);
@@ -166,22 +172,22 @@ fn test_minhashkmers() {
     assert_eq!(array[2].extra_count, 1u16);
 }
 
-#[test]
-fn test_longer_sequence() {
-    let mut queue = MinHashKmers::new(100, 42);
-
-    // for "ACACGGAAATCCTCACGTCGCGGCGCCGGGC"
-
-    // hashes should be:
-    //     (3186265289206375993,
-    //      3197567229193635484,
-    //      5157287830980272133,
-    //      7515070071080094037,
-    //      9123665698461883699,
-    //      9650810550987401968,
-    //      10462414310441547028,
-    //      12872951831549606632,
-    //      13584836512372089324,
-    //      14093285637546356047,
-    //      16069721578136260683)
-}
+//#[test]
+//fn test_longer_sequence() {
+//    let mut queue = MinHashKmers::new(100, 21, 42);
+//
+//    // for "ACACGGAAATCCTCACGTCGCGGCGCCGGGC"
+//
+//    // hashes should be:
+//    //     (3186265289206375993,
+//    //      3197567229193635484,
+//    //      5157287830980272133,
+//    //      7515070071080094037,
+//    //      9123665698461883699,
+//    //      9650810550987401968,
+//    //      10462414310441547028,
+//    //      12872951831549606632,
+//    //      13584836512372089324,
+//    //      14093285637546356047,
+//    //      16069721578136260683)
+//}

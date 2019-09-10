@@ -1,6 +1,6 @@
 use ndarray::Array2;
 
-use crate::minhashes::KmerCount;
+use crate::hash_schemes::KmerCount;
 use crate::serialization::SketchDistance;
 
 pub fn distance(

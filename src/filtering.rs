@@ -1,7 +1,7 @@
 use std::cmp;
 use std::collections::HashMap;
 
-use crate::minhashes::KmerCount;
+use crate::hash_schemes::KmerCount;
 use crate::statistics::hist;
 
 /// Used to pass around filter options for sketching

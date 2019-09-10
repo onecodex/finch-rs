@@ -5,21 +5,24 @@ extern crate capnp;
 #[macro_use]
 extern crate serde_derive;
 
-use failure::{bail, format_err, Error};
-use needletail::fastx::{fastx_cli, fastx_stream};
-use std::io::{Read, Seek};
+use std::fs::File;
+use std::io::{stdin, Read};
 use std::path::Path;
 use std::result::Result as StdResult;
 
+use failure::{bail, format_err, Error};
+use needletail::formats::parse_sequence_reader;
+
 use crate::filtering::{filter_sketch, FilterParams};
-use crate::minhashes::MinHashKmers;
+use crate::hash_schemes::minhashes::MinHashKmers;
+use crate::hash_schemes::HashScheme;
 use crate::serialization::{MultiSketch, Sketch};
 
 pub mod distance;
 pub mod filtering;
+pub mod hash_schemes;
 #[cfg(feature = "mash_format")]
 mod mash_capnp;
-pub mod minhashes;
 #[cfg(feature = "python")]
 pub mod python;
 pub mod serialization;
@@ -38,60 +41,31 @@ pub fn mash_files(
 ) -> Result<MultiSketch> {
     let mut sketches = Vec::with_capacity(filenames.len());
     for filename in filenames {
-        let mut seq_len = 0u64;
-        let path = Path::new(filename);
-        let mut minhash = match filters.filter_on {
-            Some(true) | None => MinHashKmers::new(n_hashes, seed),
-            Some(false) => MinHashKmers::new(final_size, seed),
+        let mut sketch = if filename == &"-" {
+            // special case for stdin
+            let sin = stdin();
+            mash_stream(
+                sin.lock(),
+                n_hashes,
+                final_size,
+                kmer_length,
+                filters,
+                no_strict,
+                seed,
+            )?
+        } else {
+            mash_stream(
+                File::open(&Path::new(filename))?,
+                n_hashes,
+                final_size,
+                kmer_length,
+                filters,
+                no_strict,
+                seed,
+            )?
         };
-        fastx_cli(
-            path.to_str()
-                .ok_or_else(|| format_err!("Couldn't make path into string"))?,
-            |seq_type| {
-                // disable filtering for FASTA files unless it was explicitly specified
-                if filters.filter_on.is_none() {
-                    filters.filter_on = match seq_type {
-                        "FASTA" => Some(false),
-                        "FASTQ" => Some(true),
-                        _ => panic!("Unknown sequence type"),
-                    };
-                }
-            },
-            |seq| {
-                seq_len += seq.seq.len() as u64;
-                for (_, kmer, is_rev_complement) in seq.normalize(false).kmers(kmer_length, true) {
-                    let rc_count = if is_rev_complement { 1u8 } else { 0u8 };
-                    minhash.push(kmer, rc_count);
-                }
-            },
-        )
-        .map_err(|e| format_err!("{}", e.to_string()))?;
 
-        let n_kmers = minhash.total_kmers() as u64;
-        let hashes = minhash.into_vec();
-        let (mut filtered_hashes, filter_stats) = filter_sketch(&hashes, &filters);
-        filtered_hashes.truncate(final_size);
-        if !no_strict && filtered_hashes.len() < final_size {
-            bail!(
-                "{} had too few kmers ({}) to sketch",
-                filename,
-                filtered_hashes.len()
-            );
-        }
-
-        // directory should be clipped from filename
-        let basename = path
-            .file_name()
-            .ok_or_else(|| format_err!("Couldn't get filename from path"))?;
-        let sketch = Sketch::new(
-            basename
-                .to_str()
-                .ok_or_else(|| format_err!("Couldn't make filename into string"))?,
-            seq_len,
-            n_kmers,
-            filtered_hashes,
-            &filter_stats,
-        );
+        sketch.name = filename.to_string();
         sketches.push(sketch);
     }
     Ok(MultiSketch {
@@ -107,7 +81,7 @@ pub fn mash_files(
     })
 }
 
-pub fn mash_stream<R>(
+pub fn mash_stream<R: Read>(
     reader: R,
     n_hashes: usize,
     final_size: usize,
@@ -115,16 +89,13 @@ pub fn mash_stream<R>(
     filters: &mut FilterParams,
     no_strict: bool,
     seed: u64,
-) -> Result<Sketch>
-where
-    R: Read + Seek,
-{
+) -> Result<Sketch> {
     let mut seq_len = 0u64;
     let mut minhash = match filters.filter_on {
-        Some(true) | None => MinHashKmers::new(n_hashes, seed),
-        Some(false) => MinHashKmers::new(final_size, seed),
+        Some(true) | None => MinHashKmers::new(n_hashes, kmer_length, seed),
+        Some(false) => MinHashKmers::new(final_size, kmer_length, seed),
     };
-    fastx_stream(
+    parse_sequence_reader(
         reader,
         |seq_type| {
             // disable filtering for FASTA files unless it was explicitly specified
@@ -138,10 +109,7 @@ where
         },
         |seq| {
             seq_len += seq.seq.len() as u64;
-            for (_, kmer, is_rev_complement) in seq.normalize(false).kmers(kmer_length, true) {
-                let rc_count = if is_rev_complement { 1u8 } else { 0u8 };
-                minhash.push(kmer, rc_count);
-            }
+            minhash.process(seq);
         },
     )
     .map_err(|e| format_err!("{}", e.to_string()))?;

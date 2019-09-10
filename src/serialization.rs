@@ -11,9 +11,9 @@ use serde::de::{self, Deserialize, Deserializer, Visitor};
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 
 use crate::filtering::{filter_sketch, FilterParams};
+use crate::hash_schemes::{ItemHash, KmerCount};
 #[cfg(feature = "mash_format")]
 use crate::mash_capnp::min_hash;
-use crate::minhashes::{ItemHash, KmerCount};
 use crate::Result as FinchResult;
 
 pub const FINCH_EXT: &str = ".sk";
@@ -82,7 +82,7 @@ impl<'de> Deserialize<'de> for Sketch {
             pub numValidKmers: Option<u64>,
             pub comment: Option<String>,
             pub filters: Option<HashMap<String, String>>,
-            hashes: Vec<QuotedUsize>,
+            hashes: Vec<QuotedU64>,
             kmers: Option<Vec<String>>,
             counts: Option<Vec<u16>>,
         }
@@ -300,17 +300,17 @@ pub fn read_mash_file(mut file: &mut BufRead) -> FinchResult<MultiSketch> {
     bail!("Finch wasn't compiled with Mash format support")
 }
 
-struct QuotedUsize(usize);
+struct QuotedU64(u64);
 
-impl<'de> Deserialize<'de> for QuotedUsize {
+impl<'de> Deserialize<'de> for QuotedU64 {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        struct QuotedUsizeVisitor;
+        struct QuotedU64Visitor;
 
-        impl<'de> Visitor<'de> for QuotedUsizeVisitor {
-            type Value = QuotedUsize;
+        impl<'de> Visitor<'de> for QuotedU64Visitor {
+            type Value = QuotedU64;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
                 formatter.write_str("usize as a json string")
@@ -320,10 +320,10 @@ impl<'de> Deserialize<'de> for QuotedUsize {
             where
                 E: de::Error,
             {
-                value.parse().map(QuotedUsize).map_err(de::Error::custom)
+                value.parse().map(QuotedU64).map_err(de::Error::custom)
             }
         }
 
-        deserializer.deserialize_str(QuotedUsizeVisitor)
+        deserializer.deserialize_str(QuotedU64Visitor)
     }
 }
