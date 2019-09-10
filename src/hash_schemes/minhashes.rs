@@ -149,6 +149,23 @@ impl HashScheme for MinHashKmers {
         }
         results
     }
+
+    fn to_vec(&self) -> Vec<KmerCount> {
+        let mut vec = self.hashes.clone().into_sorted_vec();
+
+        let mut results = Vec::with_capacity(vec.len());
+        for item in vec.drain(..) {
+            let counts = self.counts[&item.hash];
+            let new_item = KmerCount {
+                hash: item.hash,
+                kmer: item.item,
+                count: counts.0,
+                extra_count: counts.1,
+            };
+            results.push(new_item);
+        }
+        results
+    }
 }
 
 #[test]

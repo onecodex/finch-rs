@@ -90,6 +90,23 @@ impl HashScheme for ScaledKmers {
         }
         results
     }
+
+    fn to_vec(&self) -> Vec<KmerCount> {
+        let mut vec = self.hashes.clone().into_sorted_vec();
+
+        let mut results = Vec::with_capacity(vec.len());
+        for item in vec.drain(..) {
+            let counts = self.counts[&item.hash];
+            let new_item = KmerCount {
+                hash: item.hash,
+                kmer: item.item,
+                count: counts.0,
+                extra_count: counts.1,
+            };
+            results.push(new_item);
+        }
+        results
+    }
 }
 
 #[cfg(test)]
@@ -103,13 +120,9 @@ mod test {
         // Scaled=1 should hold all possible kmers
         let mut queue = ScaledKmers::new(3, 1., 2, 42);
         queue.push(b"ca", 0);
-        println!("{:?}", queue);
         queue.push(b"cc", 1);
-        println!("{:?}", queue);
         queue.push(b"ac", 0);
-        println!("{:?}", queue);
         queue.push(b"ac", 1);
-        println!("{:?}", queue);
         let array = queue.into_vec();
         assert_eq!(array[0].kmer, b"cc");
         assert_eq!(array[0].count, 1u16);

@@ -51,4 +51,8 @@ impl HashScheme for AllKmers {
         }
         results
     }
+
+    fn to_vec(&self) -> Vec<KmerCount> {
+        unimplemented!();
+    }
 }

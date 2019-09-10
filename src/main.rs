@@ -77,6 +77,11 @@ macro_rules! add_kmer_options {
              .help("How many kmers/hashes to store")
              .takes_value(true)
              .default_value("1000"))
+        .arg(Arg::with_name("scaled")
+             .short("s")
+             .long("scaled")
+             .help("Approximate percentage of total kmers/hashes to store")
+             .takes_value(true))
         .arg(Arg::with_name("seed")
              .long("seed")
              .help("Seed murmurhash with this value")
@@ -485,6 +490,18 @@ fn open_mash_file(
         .parse::<u8>()
         .map_err(|_| format_err!("kmer_length must be an integer < 256"))?;
 
+    let scaled = if matches.occurrences_of("scaled") > 0 {
+        Some(
+            matches
+                .value_of("scaled")
+                .ok_or_else(|| format_err!("Bad scaled value"))?
+                .parse::<f64>()
+                .map_err(|_| format_err!("scaled must be in range (0, 1]"))?,
+        )
+    } else {
+        None
+    };
+
     let no_strict = matches.is_present("no_strict");
     let filter_on = match (
         matches.is_present("filter"),
@@ -576,6 +593,7 @@ fn open_mash_file(
                 &mut filters,
                 no_strict,
                 s.hashSeed,
+                scaled,
             ),
             None => mash_files(
                 &[filename],
@@ -585,6 +603,7 @@ fn open_mash_file(
                 &mut filters,
                 no_strict,
                 seed,
+                scaled,
             ),
         };
     }

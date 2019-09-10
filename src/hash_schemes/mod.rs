@@ -19,4 +19,5 @@ pub trait HashScheme {
     fn process(&mut self, seq: SequenceRecord);
     fn total_kmers(&self) -> usize;
     fn into_vec(self) -> Vec<KmerCount>;
+    fn to_vec(&self) -> Vec<KmerCount>;
 }

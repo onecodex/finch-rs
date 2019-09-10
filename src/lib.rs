@@ -15,6 +15,7 @@ use needletail::formats::parse_sequence_reader;
 
 use crate::filtering::{filter_sketch, FilterParams};
 use crate::hash_schemes::minhashes::MinHashKmers;
+use crate::hash_schemes::scaled::ScaledKmers;
 use crate::hash_schemes::HashScheme;
 use crate::serialization::{MultiSketch, Sketch};
 
@@ -38,6 +39,7 @@ pub fn mash_files(
     filters: &mut FilterParams,
     no_strict: bool,
     seed: u64,
+    scaled: Option<f64>,
 ) -> Result<MultiSketch> {
     let mut sketches = Vec::with_capacity(filenames.len());
     for filename in filenames {
@@ -52,6 +54,7 @@ pub fn mash_files(
                 filters,
                 no_strict,
                 seed,
+                scaled,
             )?
         } else {
             mash_stream(
@@ -62,6 +65,7 @@ pub fn mash_files(
                 filters,
                 no_strict,
                 seed,
+                scaled,
             )?
         };
 
@@ -78,6 +82,7 @@ pub fn mash_files(
         hashBits: 64u16,
         hashSeed: seed,
         sketches,
+        // TODO: set scaled here
     })
 }
 
@@ -89,11 +94,17 @@ pub fn mash_stream<R: Read>(
     filters: &mut FilterParams,
     no_strict: bool,
     seed: u64,
+    scaled: Option<f64>,
 ) -> Result<Sketch> {
     let mut seq_len = 0u64;
-    let mut minhash = match filters.filter_on {
-        Some(true) | None => MinHashKmers::new(n_hashes, kmer_length, seed),
-        Some(false) => MinHashKmers::new(final_size, kmer_length, seed),
+    let n_hashes_size = match filters.filter_on {
+        Some(true) | None => n_hashes,
+        Some(false) => final_size,
+    };
+
+    let mut minhash: Box<dyn HashScheme> = match scaled {
+        Some(factor) => Box::new(ScaledKmers::new(n_hashes_size, factor, kmer_length, seed)),
+        None => Box::new(MinHashKmers::new(n_hashes_size, kmer_length, seed)),
     };
     parse_sequence_reader(
         reader,
@@ -115,8 +126,9 @@ pub fn mash_stream<R: Read>(
     .map_err(|e| format_err!("{}", e.to_string()))?;
 
     let n_kmers = minhash.total_kmers() as u64;
-    let hashes = minhash.into_vec();
+    let hashes = minhash.to_vec();
     let (mut filtered_hashes, filter_stats) = filter_sketch(&hashes, &filters);
+    // TODO: don't truncate if doing scaled?
     filtered_hashes.truncate(final_size);
     if !no_strict && filtered_hashes.len() < final_size {
         bail!(
