@@ -159,15 +159,15 @@ fn test_minhashkmers() {
     queue.push(b"ac", 0);
     queue.push(b"ac", 1);
     let array = queue.into_vec();
-    assert_eq!(array[0].kmer, vec![b'c', b'c']);
+    assert_eq!(array[0].kmer, b"cc");
     assert_eq!(array[0].count, 1u16);
     assert_eq!(array[0].extra_count, 1u16);
     assert!(array[0].hash < array[1].hash);
-    assert_eq!(array[1].kmer, vec![b'c', b'a']);
+    assert_eq!(array[1].kmer, b"ca");
     assert_eq!(array[1].count, 1u16);
     assert_eq!(array[1].extra_count, 0u16);
     assert!(array[1].hash < array[2].hash);
-    assert_eq!(array[2].kmer, vec![b'a', b'c']);
+    assert_eq!(array[2].kmer, b"ac");
     assert_eq!(array[2].count, 2u16);
     assert_eq!(array[2].extra_count, 1u16);
 }
