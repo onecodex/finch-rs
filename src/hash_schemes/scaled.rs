@@ -103,9 +103,13 @@ mod test {
         // Scaled=1 should hold all possible kmers
         let mut queue = ScaledKmers::new(3, 1., 2, 42);
         queue.push(b"ca", 0);
+        println!("{:?}", queue);
         queue.push(b"cc", 1);
+        println!("{:?}", queue);
         queue.push(b"ac", 0);
+        println!("{:?}", queue);
         queue.push(b"ac", 1);
+        println!("{:?}", queue);
         let array = queue.into_vec();
         assert_eq!(array[0].kmer, b"cc");
         assert_eq!(array[0].count, 1u16);
