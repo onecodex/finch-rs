@@ -4,7 +4,7 @@ use std::usize;
 
 use needletail::{Sequence, SequenceRecord};
 
-use crate::hash_schemes::minhashes::{hash_f, HashedItem, NoHashHasher};
+use crate::hash_schemes::minhashes::{hash_f, HashedItem, MinHashKmers, NoHashHasher};
 use crate::hash_schemes::{HashScheme, ItemHash, KmerCount};
 
 #[derive(Clone, Debug)]
@@ -109,6 +109,30 @@ impl HashScheme for ScaledKmers {
     }
 }
 
+impl From<ScaledKmers> for MinHashKmers {
+    fn from(value: ScaledKmers) -> Self {
+        let size = value.size;
+        let kmer_length = value.kmer_length;
+        let total_kmers = value.total_kmers;
+        let seed = value.seed;
+
+        let mut hashes = value.hashes.into_sorted_vec();
+        hashes.truncate(size);
+
+        let mut counts = value.counts;
+        counts.retain(|&k, _| hashes.binary_search_by_key(&k, |a| a.hash).is_ok());
+
+        MinHashKmers {
+            hashes: hashes.into(),
+            counts,
+            kmer_length,
+            total_kmers,
+            size,
+            seed,
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use proptest::prelude::*;
@@ -173,6 +197,24 @@ mod test {
         let array = queue.into_vec();
         assert_eq!(array.len(), 3, "Only small hashes should be left");
         assert!(array.iter().all(|e| e.kmer != b"AAAA"))
+    }
+
+    #[test]
+    fn test_minhashkmers_eviction_and_conversion() {
+        let mut queue = ScaledKmers::new(4, 0.01, 4, 42);
+        // random kmer that hashes above max_hash
+        queue.push(b"AAAA", 0);
+        // now fill with kmers that hash below max_hash.
+        queue.push(b"AGTA", 0);
+        queue.push(b"CCCC", 1);
+        queue.push(b"ATAA", 0);
+
+        // The scaled minhash should have 3 hashes, but since we asked for
+        // size=4 MinHashKmers should have size=4
+        let mh: MinHashKmers = queue.into();
+        let array = mh.into_vec();
+
+        assert_eq!(array.len(), 4, "Should keep all four hashes");
     }
 
     #[test]

@@ -67,12 +67,12 @@ impl Hasher for NoHashHasher {
 
 #[derive(Clone)]
 pub struct MinHashKmers {
-    hashes: BinaryHeap<HashedItem<Vec<u8>>>,
-    counts: HashMap<ItemHash, (u16, u16), BuildHasherDefault<NoHashHasher>>,
-    kmer_length: u8,
-    total_kmers: u64,
-    size: usize,
-    seed: u64,
+    pub(crate) hashes: BinaryHeap<HashedItem<Vec<u8>>>,
+    pub(crate) counts: HashMap<ItemHash, (u16, u16), BuildHasherDefault<NoHashHasher>>,
+    pub(crate) kmer_length: u8,
+    pub(crate) total_kmers: u64,
+    pub(crate) size: usize,
+    pub(crate) seed: u64,
 }
 
 impl MinHashKmers {

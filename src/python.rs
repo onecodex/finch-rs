@@ -163,7 +163,7 @@ impl Sketch {
     }
 
     #[getter]
-    fn get_hashes(&self) -> PyResult<Vec<(usize, Py<PyBytes>, u16, u16)>> {
+    fn get_hashes(&self) -> PyResult<Vec<(u64, Py<PyBytes>, u16, u16)>> {
         let gil = Python::acquire_gil();
         let py = gil.python();
         Ok(self
@@ -262,7 +262,7 @@ impl PyMappingProtocol for Sketch {
 // set difference calculations?
 // see https://github.com/PyO3/pyo3/blob/master/tests/test_arithmetics.rs for details
 
-/// sketch_files(filenames, n_hashes, final_size, kmer_length, filter, seed)
+/// sketch_files(filenames, n_hashes, final_size, kmer_length, filter, seed, scaled)
 /// ---
 ///
 /// From the FASTA and FASTQ file paths, create a Multisketch.
@@ -275,6 +275,7 @@ pub fn sketch_files(
     kmer_length: u8,
     filter: bool,
     seed: u64,
+    scaled: Option<f64>,
 ) -> PyResult<Multisketch> {
     // TODO: allow more filter customization?
 
@@ -299,6 +300,7 @@ pub fn sketch_files(
             &mut filters,
             false,
             seed,
+            scaled,
         )
         .map_err(|e| PyErr::new::<FinchError, _>(format!("{}", e)))?,
     })
