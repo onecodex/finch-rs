@@ -137,6 +137,8 @@ impl From<ScaledKmers> for MinHashKmers {
 mod test {
     use proptest::prelude::*;
 
+    use crate::distance::distance_scaled;
+
     use super::*;
 
     #[test]
@@ -252,5 +254,29 @@ mod test {
             let array = queue.into_vec();
             assert!(array.iter().all(|item| item.hash <= max_hash));
         }
+    }
+
+    #[test]
+    fn test_distance_scaled() -> Result<(), Box<dyn std::error::Error>> {
+        let mut queue1 = ScaledKmers::new(3, 0.001, 2, 42);
+        queue1.push(b"ca", 0);
+        queue1.push(b"cc", 1);
+        queue1.push(b"ac", 0);
+        queue1.push(b"ac", 1);
+        let array1 = queue1.into_vec();
+
+        let mut queue2 = ScaledKmers::new(3, 0.001, 2, 42);
+        queue2.push(b"ca", 0);
+        queue2.push(b"cc", 1);
+        queue2.push(b"ac", 0);
+        queue2.push(b"ac", 1);
+        let array2 = queue2.into_vec();
+
+        let dist = distance_scaled(&array1, &array2, "", "")?;
+        assert_eq!(dist.jaccard, 1.0);
+        assert_eq!(dist.containment, 1.0);
+        assert_eq!(dist.commonHashes, 3);
+
+        Ok(())
     }
 }

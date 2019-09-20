@@ -37,6 +37,38 @@ pub fn distance(
     })
 }
 
+pub fn distance_scaled(
+    sketch1: &[KmerCount],
+    sketch2: &[KmerCount],
+    sketch1_name: &str,
+    sketch2_name: &str,
+) -> Result<SketchDistance, &'static str> {
+    // // TODO: in principle this is a good check, but sometimes one of the kmers will be "" if
+    // // serialized without and that break this
+    // if sketch1[0].kmer.len() != sketch2[0].kmer.len() {
+    //     return Err("Sketches have different sized kmers");
+    // }
+
+    // TODO: check if both sketches are in the same scaled factor
+    let distances = raw_mash_distance(sketch1, sketch2);
+
+    let containment = distances.0;
+    let jaccard = distances.1;
+    let common = distances.2;
+    let total = distances.3;
+    let mash_distance: f64 =
+        -1.0 * ((2.0 * jaccard) / (1.0 + jaccard)).ln() / sketch1[0].kmer.len() as f64;
+    Ok(SketchDistance {
+        containment,
+        jaccard,
+        mashDistance: f64::min(1f64, f64::max(0f64, mash_distance)),
+        commonHashes: common,
+        totalHashes: total,
+        query: sketch1_name.to_string(),
+        reference: sketch2_name.to_string(),
+    })
+}
+
 fn raw_mash_distance(sketch1: &[KmerCount], sketch2: &[KmerCount]) -> (f64, f64, u64, u64) {
     let mut i: usize = 0;
     let mut j: usize = 0;

@@ -8,7 +8,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyTuple, PyType};
 use pyo3::{py_exception, wrap_function};
 
-use crate::distance::{common_counts, distance, minmer_matrix};
+use crate::distance::{common_counts, distance, distance_scaled, minmer_matrix};
 use crate::filtering::FilterParams;
 use crate::hash_schemes::KmerCount;
 use crate::mash_files;
@@ -207,6 +207,16 @@ impl Sketch {
     #[args(mash_mode = true)]
     pub fn compare(&self, sketch: &Sketch, mash_mode: bool) -> PyResult<(f64, f64)> {
         let dist = distance(&self.s.hashes, &sketch.s.hashes, &"", &"", mash_mode)
+            .map_err(|e| PyErr::new::<FinchError, _>(format!("{}", e)))?;
+
+        Ok((dist.containment, dist.jaccard))
+    }
+
+    /// compare_scaled(sketch)
+    ///
+    /// Calculates the containment within and jaccard similarity to another scaled sketch.
+    pub fn compare_scaled(&self, sketch: &Sketch) -> PyResult<(f64, f64)> {
+        let dist = distance_scaled(&self.s.hashes, &sketch.s.hashes, &"", &"")
             .map_err(|e| PyErr::new::<FinchError, _>(format!("{}", e)))?;
 
         Ok((dist.containment, dist.jaccard))
