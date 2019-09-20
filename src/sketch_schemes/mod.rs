@@ -77,7 +77,8 @@ impl SketchParams {
             final_size,
             no_strict,
             ..
-        } = self {
+        } = self
+        {
             kmers.truncate(*final_size);
             if !no_strict && kmers.len() < *final_size {
                 bail!("{} had too few kmers ({}) to sketch", name, kmers.len(),);
@@ -97,7 +98,9 @@ impl SketchParams {
     pub fn hash_info(&self) -> (&str, u16, u64, Option<f64>) {
         match self {
             SketchParams::Mash { hash_seed, .. } => ("MurmurHash3_x64_128", 64, *hash_seed, None),
-            SketchParams::Scaled { hash_seed, scale, .. } => ("MurmurHash3_x64_128", 64, *hash_seed, Some(*scale)),
+            SketchParams::Scaled {
+                hash_seed, scale, ..
+            } => ("MurmurHash3_x64_128", 64, *hash_seed, Some(*scale)),
             SketchParams::AllCounts { .. } => ("None", 0, 0, None),
         }
     }

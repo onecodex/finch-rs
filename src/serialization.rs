@@ -219,7 +219,10 @@ impl MultiSketch {
         Ok(match (&*self.hash_type, self.scale) {
             ("MurmurHash3_x64_128", None) => {
                 if self.hash_bits != 64 {
-                    bail!("Multisketch has incompatible hash size ({} != 64)", self.hash_bits);
+                    bail!(
+                        "Multisketch has incompatible hash size ({} != 64)",
+                        self.hash_bits
+                    );
                 }
                 SketchParams::Mash {
                     kmers_to_sketch: self.sketch_size as usize,
@@ -228,10 +231,13 @@ impl MultiSketch {
                     kmer_length: self.kmer,
                     hash_seed: self.hash_seed,
                 }
-            },
+            }
             ("MurmurHash3_x64_128", Some(scale)) => {
                 if self.hash_bits != 64 {
-                    bail!("Multisketch has incompatible hash size ({} != 64)", self.hash_bits);
+                    bail!(
+                        "Multisketch has incompatible hash size ({} != 64)",
+                        self.hash_bits
+                    );
                 }
                 SketchParams::Scaled {
                     kmers_to_sketch: self.sketch_size as usize,
@@ -239,11 +245,9 @@ impl MultiSketch {
                     scale: scale,
                     hash_seed: self.hash_seed,
                 }
-            },
-            ("None", _) => {
-                SketchParams::AllCounts {
-                    kmer_length: self.kmer,
-                }
+            }
+            ("None", _) => SketchParams::AllCounts {
+                kmer_length: self.kmer,
             },
             (x, _) => bail!("{} sketch type is not supported", x),
         })

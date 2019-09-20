@@ -1,11 +1,8 @@
-use std::fs;
 use std::io::{BufReader, Cursor};
-use std::path::PathBuf;
 use std::process::Command;
 
 use assert_cmd::prelude::*;
-use assert_fs::prelude::*;
-use predicates::prelude::*;
+use predicates::prelude::predicate;
 
 use finch::serialization::{read_mash_file, MultiSketch};
 
@@ -41,27 +38,16 @@ fn finch_sketch() -> Result<(), Box<dyn std::error::Error>> {
 
 #[test]
 fn finch_sketch_msh() -> Result<(), Box<dyn std::error::Error>> {
-    let mut test_data = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    test_data.push("tests/data/");
-
-    let tmp_dir = assert_fs::TempDir::new()?;
-    tmp_dir.copy_from(test_data, &["query.fa"])?;
-
-    let query = tmp_dir.child("query.fa");
-
     let mut cmd = Command::cargo_bin("finch")?;
     cmd.arg("sketch")
         .args(&["--n-hashes", "10"])
         .arg("-b")
-        .arg(query.path());
+        .arg("-O")
+        .arg("tests/data/query.fa");
     cmd.assert().success();
 
-    tmp_dir
-        .child("query.fa.msh")
-        .assert(predicate::path::exists());
-
-    let f = fs::File::open(tmp_dir.child("query.fa.msh").path())?;
-    let mut buf_reader = BufReader::new(f);
+    let output = Cursor::new(cmd.output().unwrap().stdout);
+    let mut buf_reader = BufReader::new(output);
     let sketch: MultiSketch = read_mash_file(&mut buf_reader)?;
     assert_eq!(sketch.kmer, 21);
     assert_eq!(sketch.alphabet, "ACGT");

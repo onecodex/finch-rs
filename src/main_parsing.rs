@@ -185,7 +185,7 @@ pub fn parse_sketch_options(
                 kmer_length,
                 hash_seed: get_int_arg(matches, "seed")?,
             }
-        },
+        }
         "scaled" => {
             if matches.occurrences_of("oversketch") != 0 {
                 bail!("`oversketch` can not be specified for `scaled` sketch types")
@@ -201,7 +201,7 @@ pub fn parse_sketch_options(
                 scale,
                 hash_seed: get_int_arg(matches, "seed")?,
             }
-        },
+        }
         "none" => {
             if matches.occurrences_of("n_hashes") != 0 {
                 bail!("`n_hashes` can not be specified for `none` sketch types")
@@ -218,10 +218,8 @@ pub fn parse_sketch_options(
             if matches.occurrences_of("scale") != 0 {
                 bail!("`scale` can not be specified for `none` sketch types")
             }
-            SketchParams::AllCounts {
-                kmer_length,
-            }
-        },
+            SketchParams::AllCounts { kmer_length }
+        }
         _ => panic!("A unknown sketch type was selected"),
     })
 }
