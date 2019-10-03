@@ -12,6 +12,7 @@ use std::result::Result as StdResult;
 
 use failure::{bail, format_err, Error};
 use needletail::formats::parse_sequence_reader;
+use rayon::prelude::*;
 
 use crate::filtering::{filter_sketch, FilterParams};
 use crate::hash_schemes::minhashes::MinHashKmers;
@@ -39,35 +40,37 @@ pub fn mash_files(
     no_strict: bool,
     seed: u64,
 ) -> Result<MultiSketch> {
-    let mut sketches = Vec::with_capacity(filenames.len());
-    for filename in filenames {
-        let mut sketch = if filename == &"-" {
-            // special case for stdin
-            let sin = stdin();
-            mash_stream(
-                sin.lock(),
-                n_hashes,
-                final_size,
-                kmer_length,
-                filters,
-                no_strict,
-                seed,
-            )?
-        } else {
-            mash_stream(
-                File::open(&Path::new(filename))?,
-                n_hashes,
-                final_size,
-                kmer_length,
-                filters,
-                no_strict,
-                seed,
-            )?
-        };
-
-        sketch.name = filename.to_string();
-        sketches.push(sketch);
-    }
+    let sketches: Result<Vec<Sketch>> = filenames
+        .par_iter()
+        .map(|filename| {
+            let mut filters = filters.clone();
+            let mut sketch = if filename == &"-" {
+                // special case for stdin
+                let sin = stdin();
+                mash_stream(
+                    sin.lock(),
+                    n_hashes,
+                    final_size,
+                    kmer_length,
+                    &mut filters,
+                    no_strict,
+                    seed,
+                )?
+            } else {
+                mash_stream(
+                    File::open(&Path::new(filename))?,
+                    n_hashes,
+                    final_size,
+                    kmer_length,
+                    &mut filters,
+                    no_strict,
+                    seed,
+                )?
+            };
+            sketch.name = filename.to_string();
+            Ok(sketch)
+        })
+        .collect();
     Ok(MultiSketch {
         kmer: kmer_length,
         alphabet: String::from("ACGT"),
@@ -77,7 +80,7 @@ pub fn mash_files(
         hashType: String::from("MurmurHash3_x64_128"),
         hashBits: 64u16,
         hashSeed: seed,
-        sketches,
+        sketches: sketches?,
     })
 }
 
