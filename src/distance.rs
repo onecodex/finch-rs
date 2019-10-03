@@ -112,8 +112,8 @@ pub fn common_counts(sketch1: &[KmerCount], sketch2: &[KmerCount]) -> (u64, u64,
         } else if sketch2[pos2].hash < sketch1[pos1].hash {
             pos2 += 1;
         } else {
-            count1 += u64::from(sketch1[pos1].count);
-            count2 += u64::from(sketch2[pos2].count);
+            count1 += sketch1[pos1].count;
+            count2 += sketch2[pos2].count;
             pos1 += 1;
             pos2 += 1;
             common += 1;
@@ -138,7 +138,7 @@ where
             }
 
             if hash.hash == ref_sketch[ref_pos].hash {
-                result[[i, ref_pos]] = u64::from(hash.count);
+                result[[i, ref_pos]] = hash.count;
             }
         }
     }

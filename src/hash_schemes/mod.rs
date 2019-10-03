@@ -1,18 +1,18 @@
 pub mod counts;
+mod hashing;
 pub mod minhashes;
 pub mod scaled;
 
 use needletail::SequenceRecord;
 
-// The individual items to store in the BinaryHeap
-pub type ItemHash = u64;
+pub use hashing::ItemHash;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Hash, Serialize)]
 pub struct KmerCount {
     pub hash: ItemHash,
     pub kmer: Vec<u8>,
-    pub count: u16,
-    pub extra_count: u16,
+    pub count: u64,
+    pub extra_count: u64,
 }
 
 pub trait HashScheme {

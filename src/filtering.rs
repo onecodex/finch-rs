@@ -8,59 +8,73 @@ use crate::statistics::hist;
 #[derive(Clone, Debug)]
 pub struct FilterParams {
     pub filter_on: Option<bool>,
-    pub abun_filter: (Option<u16>, Option<u16>),
+    pub abun_filter: (Option<u64>, Option<u64>),
     pub err_filter: f32,
     pub strand_filter: f32,
 }
 
-/// Applies filter options to a sketch
-pub fn filter_sketch(
-    hashes: &[KmerCount],
-    filters: &FilterParams,
-) -> (Vec<KmerCount>, HashMap<String, String>) {
-    let filter_on = filters
-        .filter_on
-        .expect("Sorry! Filter should have either been passed or set during detection");
-    let mut filter_stats: HashMap<String, String> = HashMap::new();
+impl FilterParams {
+    /// Returns the filtered kmer counts and the low abundance cutoff, if there
+    /// was a different one determined from the err_filter.
+    pub fn filter_sketch(&self, hashes: &[KmerCount]) -> (Vec<KmerCount>, Option<u64>) {
+        let filter_on = self.filter_on == Some(true);
+        let mut filtered_hashes = hashes.to_vec();
+        let (mut low_abun_filter, high_abun_filter) = self.abun_filter;
 
-    let mut low_abun_filter = filters.abun_filter.0;
-    let mut filtered_hashes = hashes.to_vec();
-
-    if filter_on && filters.strand_filter > 0f32 {
-        filtered_hashes = filter_strands(&filtered_hashes, filters.strand_filter);
-        filter_stats.insert(
-            String::from("strandFilter"),
-            filters.strand_filter.to_string(),
-        );
-    }
-
-    if filter_on && filters.err_filter > 0f32 {
-        let cutoff = guess_filter_threshold(&filtered_hashes, filters.err_filter);
-        if low_abun_filter.is_none() {
-            low_abun_filter = Some(cutoff);
-            filter_stats.insert(String::from("errFilter"), filters.err_filter.to_string());
+        if filter_on && self.strand_filter > 0f32 {
+            filtered_hashes = filter_strands(&filtered_hashes, self.strand_filter);
         }
+
+        let mut low_filter_used = None;
+        if filter_on && self.err_filter > 0f32 {
+            let cutoff = guess_filter_threshold(&filtered_hashes, self.err_filter);
+            if let Some(v) = low_abun_filter {
+                // there's an existing filter so we only use this one if it's stricter
+                if cutoff > v {
+                    low_abun_filter = Some(cutoff);
+                    low_filter_used = Some(cutoff);
+                }
+            } else {
+                // no filter set so just use the one we determined
+                low_abun_filter = Some(cutoff);
+                low_filter_used = Some(cutoff);
+            }
+        }
+
+        if filter_on && (low_abun_filter.is_some() || high_abun_filter.is_some()) {
+            filtered_hashes = filter_abundance(&filtered_hashes, low_abun_filter, high_abun_filter);
+        }
+
+        (filtered_hashes, low_filter_used)
     }
 
-    if filter_on && (low_abun_filter != None || filters.abun_filter.1 != None) {
-        filtered_hashes =
-            filter_abundance(&filtered_hashes, low_abun_filter, filters.abun_filter.1);
-        if let Some(v) = low_abun_filter {
+    pub fn serialize_filter_params(&self) -> HashMap<String, String> {
+        let mut filter_stats: HashMap<String, String> = HashMap::new();
+        if self.filter_on != Some(true) {
+            return filter_stats;
+        }
+
+        if self.strand_filter > 0f32 {
+            filter_stats.insert(String::from("strandFilter"), self.strand_filter.to_string());
+        }
+        if self.err_filter > 0f32 {
+            filter_stats.insert(String::from("errFilter"), self.err_filter.to_string());
+        }
+        if let Some(v) = self.abun_filter.0 {
             filter_stats.insert(String::from("minCopies"), v.to_string());
         }
-        if let Some(v) = filters.abun_filter.1 {
+        if let Some(v) = self.abun_filter.1 {
             filter_stats.insert(String::from("maxCopies"), v.to_string());
         }
+        filter_stats
     }
-
-    (filtered_hashes, filter_stats)
 }
 
 /// Determines a dynamic filtering threshold for low abundance kmers
 ///
 /// Useful for removing, e.g. kmers containing sequencing errors
 ///
-pub fn guess_filter_threshold(sketch: &[KmerCount], filter_level: f32) -> u16 {
+pub fn guess_filter_threshold(sketch: &[KmerCount], filter_level: f32) -> u64 {
     let hist_data = hist(sketch);
     let total_counts = hist_data
         .iter()
@@ -81,7 +95,7 @@ pub fn guess_filter_threshold(sketch: &[KmerCount], filter_level: f32) -> u16 {
     }
 
     if wgt_cutoff <= 2 {
-        return wgt_cutoff as u16;
+        return wgt_cutoff as u64;
     }
 
     // now find the right-most global maxima
@@ -89,7 +103,7 @@ pub fn guess_filter_threshold(sketch: &[KmerCount], filter_level: f32) -> u16 {
     let mut sum: u64 = hist_data[..win_size].iter().sum();
     let mut lowest_val = sum;
     let mut lowest_idx = win_size;
-    for (i, j) in (0..wgt_cutoff - win_size).zip(win_size..wgt_cutoff) {
+    for (i, j) in (0..wgt_cutoff - win_size - 1).zip(win_size..wgt_cutoff - 1) {
         if sum <= lowest_val {
             lowest_val = sum;
             lowest_idx = j;
@@ -98,7 +112,7 @@ pub fn guess_filter_threshold(sketch: &[KmerCount], filter_level: f32) -> u16 {
         sum += hist_data[j];
     }
 
-    lowest_idx as u16
+    lowest_idx as u64
 }
 
 #[test]
@@ -211,12 +225,12 @@ fn test_guess_filter_threshold() {
 
 pub fn filter_abundance(
     sketch: &[KmerCount],
-    low: Option<u16>,
-    high: Option<u16>,
+    low: Option<u64>,
+    high: Option<u64>,
 ) -> Vec<KmerCount> {
     let mut filtered = Vec::new();
-    let lo_threshold = low.unwrap_or(0u16);
-    let hi_threshold = high.unwrap_or(u16::max_value());
+    let lo_threshold = low.unwrap_or(0u64);
+    let hi_threshold = high.unwrap_or(u64::max_value());
     for kmer in sketch {
         if lo_threshold <= kmer.count && kmer.count <= hi_threshold {
             filtered.push(kmer.clone());
@@ -294,14 +308,14 @@ pub fn filter_strands(sketch: &[KmerCount], ratio_cutoff: f32) -> Vec<KmerCount>
         // determine if something is an adapter or not. The odds of randomly picking less than 10%
         // (0 or 1 reversed kmers) in 16 should be ~ 17 / 2 ** 16 or 1/4000 so we're avoiding
         // removing "good" kmers
-        if kmer.count < 16u16 {
+        if kmer.count < 16 {
             filtered.push(kmer.clone());
             continue;
         }
 
         // check the forward/reverse ratio and only add if it's within bounds
-        let lowest_strand_count: u16 = cmp::min(kmer.extra_count, kmer.count - kmer.extra_count);
-        if (f32::from(lowest_strand_count) / f32::from(kmer.count)) >= ratio_cutoff {
+        let lowest_strand_count: u64 = cmp::min(kmer.extra_count, kmer.count - kmer.extra_count);
+        if (lowest_strand_count as f64 / kmer.count as f64) >= ratio_cutoff.into() {
             filtered.push(kmer.clone());
         }
     }

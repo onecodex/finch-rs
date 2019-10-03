@@ -5,7 +5,7 @@ use crate::hash_schemes::{HashScheme, KmerCount};
 
 #[derive(Clone)]
 pub struct AllKmers {
-    counts: Vec<u16>,
+    counts: Vec<u64>,
     k: u8,
 }
 
@@ -27,7 +27,7 @@ impl HashScheme for AllKmers {
     }
 
     fn total_kmers(&self) -> usize {
-        let total: u16 = self.counts.iter().sum();
+        let total: u64 = self.counts.iter().sum();
         total as usize
     }
 

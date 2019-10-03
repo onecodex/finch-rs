@@ -46,10 +46,10 @@ This will print results (in JSON) with some key distance statistics, including `
 In this case, these files have an estimated distance of ~0.17 and a containment of 0.03 (i.e., the two FASTQs share 3% of their min-mers). Note that re-computing the sketches with a larger `--n-hashes` parameter can provide additional resolution for highly similar datasets.
 
 
-Next, we may want to find the nearest genomes to our example FASTQ **across all of RefSeq**. To do this, we simple pass a sketch containing all the genomes in RefSeq as the first argument, and our example file as the second (see the Example Data section for pre-computed RefSeq databases that work with `finch`):
+Next, we may want to find the nearest genomes to our example FASTQ **across all of RefSeq**. To do this, we simply pass our example query file as the first argument and a sketch file containing all the genomes in RefSeq as the second argument (see the Example Data section for pre-computed RefSeq databases that work with `finch`):
 
 ```
-finch dist ./refseq_sketches_21_1000.sk ./example.fastq.sk --max-dist 0.2
+finch dist ./example.fastq.sk ./refseq_sketches_21_1000.sk --max-dist 0.2
 ```
 
 Here, we also set a maximum distance of 0.2 in order to filter out less closely related genomes (a distance of 0 would be an identical genome). Setting a maximum ensures that the only relevant results are returned -- omitting this parameter would return distances to *all* of the genomes in RefSeq.
@@ -140,7 +140,7 @@ Sketches should be compatible with the original Mash implementation if you edit 
 `finch dist` will calculate Jaccard distances between different sketches.
 If the files listed are FASTA/Q instead of sketches, Finch will automatically sketch them into memory using the same command-line parameters as in `sketch` or, for files after the first, the parameters used to sketch the first file.
 
-Distances and containments will only be computed from one or more queries to a collection of references; by default the last sketch in the list will be used as the query and all other sketches will be used as references.
+Distances and containments will only be computed from one or more queries to a collection of references; by default the first sketch in the list will be used as the query and all other sketches will be used as references.
 This behavior can be manually overriden and other sketches can be used as references by passing `--queries <sketch_1>,<sketch_2`.
 Additionally, passing the `--pairwise` option will calculate the distances between all sketches and each other.
 

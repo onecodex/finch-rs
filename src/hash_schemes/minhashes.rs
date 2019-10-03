@@ -1,74 +1,16 @@
-use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap};
-use std::hash::{BuildHasherDefault, Hasher};
+use std::hash::BuildHasherDefault;
 use std::usize;
 
-use murmurhash3::murmurhash3_x64_128;
 use needletail::{Sequence, SequenceRecord};
 
+use crate::hash_schemes::hashing::{hash_f, HashedItem, NoHashHasher};
 use crate::hash_schemes::{HashScheme, ItemHash, KmerCount};
-
-#[inline]
-pub fn hash_f(item: &[u8], seed: u64) -> ItemHash {
-    murmurhash3_x64_128(item, seed).0
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct HashedItem<T> {
-    pub(crate) hash: ItemHash,
-    pub(crate) item: T,
-}
-
-impl<T> PartialEq for HashedItem<T> {
-    fn eq(&self, other: &HashedItem<T>) -> bool {
-        other.hash.eq(&self.hash)
-    }
-}
-
-impl<T> Eq for HashedItem<T> {}
-
-impl<T> Ord for HashedItem<T> {
-    fn cmp(&self, other: &HashedItem<T>) -> Ordering {
-        self.hash.cmp(&other.hash)
-    }
-}
-
-impl<T> PartialOrd for HashedItem<T> {
-    fn partial_cmp(&self, other: &HashedItem<T>) -> Option<Ordering> {
-        Some(self.hash.cmp(&other.hash))
-    }
-}
-
-/// If we're using a `HashMap` where the keys themselves are hashes, it's
-/// a little silly to re-hash them. That's where the `NoHashHasher` comes in.
-pub struct NoHashHasher(u64);
-
-impl Default for NoHashHasher {
-    #[inline]
-    fn default() -> NoHashHasher {
-        NoHashHasher(0x0000_0000_0000_0000)
-    }
-}
-
-impl Hasher for NoHashHasher {
-    #[inline]
-    fn write(&mut self, bytes: &[u8]) {
-        *self = NoHashHasher(
-            (u64::from(bytes[0]) << 24)
-                + (u64::from(bytes[1]) << 16)
-                + (u64::from(bytes[2]) << 8)
-                + u64::from(bytes[3]),
-        );
-    }
-    fn finish(&self) -> u64 {
-        self.0
-    }
-}
 
 #[derive(Clone)]
 pub struct MinHashKmers {
     hashes: BinaryHeap<HashedItem<Vec<u8>>>,
-    counts: HashMap<ItemHash, (u16, u16), BuildHasherDefault<NoHashHasher>>,
+    counts: HashMap<ItemHash, (u64, u64), BuildHasherDefault<NoHashHasher>>,
     kmer_length: u8,
     total_kmers: u64,
     size: usize,
@@ -100,15 +42,15 @@ impl MinHashKmers {
 
         if add_hash {
             if self.counts.contains_key(&new_hash) {
-                let count = self.counts.entry(new_hash).or_insert((0u16, 0u16));
+                let count = self.counts.entry(new_hash).or_insert((0, 0));
                 (*count).0 += 1;
-                (*count).1 += u16::from(extra_count);
+                (*count).1 += u64::from(extra_count);
             } else {
                 self.hashes.push(HashedItem {
                     hash: new_hash,
                     item: kmer.to_owned(),
                 });
-                self.counts.insert(new_hash, (1u16, u16::from(extra_count)));
+                self.counts.insert(new_hash, (1, u64::from(extra_count)));
                 if self.hashes.len() > self.size {
                     let hash = self.hashes.pop().unwrap();
                     let _ = self.counts.remove(&hash.hash).unwrap();
@@ -160,16 +102,16 @@ fn test_minhashkmers() {
     queue.push(b"ac", 1);
     let array = queue.into_vec();
     assert_eq!(array[0].kmer, b"cc");
-    assert_eq!(array[0].count, 1u16);
-    assert_eq!(array[0].extra_count, 1u16);
+    assert_eq!(array[0].count, 1);
+    assert_eq!(array[0].extra_count, 1);
     assert!(array[0].hash < array[1].hash);
     assert_eq!(array[1].kmer, b"ca");
-    assert_eq!(array[1].count, 1u16);
-    assert_eq!(array[1].extra_count, 0u16);
+    assert_eq!(array[1].count, 1);
+    assert_eq!(array[1].extra_count, 0);
     assert!(array[1].hash < array[2].hash);
     assert_eq!(array[2].kmer, b"ac");
-    assert_eq!(array[2].count, 2u16);
-    assert_eq!(array[2].extra_count, 1u16);
+    assert_eq!(array[2].count, 2);
+    assert_eq!(array[2].extra_count, 1);
 }
 
 //#[test]

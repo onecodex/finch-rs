@@ -4,13 +4,13 @@ use std::usize;
 
 use needletail::{Sequence, SequenceRecord};
 
-use crate::hash_schemes::minhashes::{hash_f, HashedItem, NoHashHasher};
+use crate::hash_schemes::hashing::{hash_f, HashedItem, NoHashHasher};
 use crate::hash_schemes::{HashScheme, ItemHash, KmerCount};
 
 #[derive(Clone, Debug)]
 pub struct ScaledKmers {
     hashes: BinaryHeap<HashedItem<Vec<u8>>>,
-    counts: HashMap<ItemHash, (u16, u16), BuildHasherDefault<NoHashHasher>>,
+    counts: HashMap<ItemHash, (u64, u64), BuildHasherDefault<NoHashHasher>>,
     kmer_length: u8,
     total_kmers: u64,
     size: usize,
@@ -39,15 +39,15 @@ impl ScaledKmers {
 
         if new_hash <= self.max_hash || (self.hashes.len() <= self.size && self.size != 0) {
             if self.counts.contains_key(&new_hash) {
-                let count = self.counts.entry(new_hash).or_insert((0u16, 0u16));
+                let count = self.counts.entry(new_hash).or_insert((0, 0));
                 (*count).0 += 1;
-                (*count).1 += u16::from(extra_count);
+                (*count).1 += u64::from(extra_count);
             } else {
                 self.hashes.push(HashedItem {
                     hash: new_hash,
                     item: kmer.to_owned(),
                 });
-                self.counts.insert(new_hash, (1u16, u16::from(extra_count)));
+                self.counts.insert(new_hash, (1, u64::from(extra_count)));
                 if self.hashes.len() > self.size
                     && (*self.hashes.peek().unwrap()).hash > self.max_hash
                 {
@@ -108,16 +108,16 @@ mod test {
         queue.push(b"ac", 1);
         let array = queue.into_vec();
         assert_eq!(array[0].kmer, b"cc");
-        assert_eq!(array[0].count, 1u16);
-        assert_eq!(array[0].extra_count, 1u16);
+        assert_eq!(array[0].count, 1);
+        assert_eq!(array[0].extra_count, 1);
         assert!(array[0].hash < array[1].hash);
         assert_eq!(array[1].kmer, b"ca");
-        assert_eq!(array[1].count, 1u16);
-        assert_eq!(array[1].extra_count, 0u16);
+        assert_eq!(array[1].count, 1);
+        assert_eq!(array[1].extra_count, 0);
         assert!(array[1].hash < array[2].hash);
         assert_eq!(array[2].kmer, b"ac");
-        assert_eq!(array[2].count, 2u16);
-        assert_eq!(array[2].extra_count, 1u16);
+        assert_eq!(array[2].count, 2);
+        assert_eq!(array[2].extra_count, 1);
     }
 
     #[test]
@@ -131,16 +131,16 @@ mod test {
         queue.push(b"ac", 1);
         let array = queue.into_vec();
         assert_eq!(array[0].kmer, b"cc");
-        assert_eq!(array[0].count, 1u16);
-        assert_eq!(array[0].extra_count, 1u16);
+        assert_eq!(array[0].count, 1);
+        assert_eq!(array[0].extra_count, 1);
         assert!(array[0].hash < array[1].hash);
         assert_eq!(array[1].kmer, b"ca");
-        assert_eq!(array[1].count, 1u16);
-        assert_eq!(array[1].extra_count, 0u16);
+        assert_eq!(array[1].count, 1);
+        assert_eq!(array[1].extra_count, 0);
         assert!(array[1].hash < array[2].hash);
         assert_eq!(array[2].kmer, b"ac");
-        assert_eq!(array[2].count, 2u16);
-        assert_eq!(array[2].extra_count, 1u16);
+        assert_eq!(array[2].count, 2);
+        assert_eq!(array[2].extra_count, 1);
     }
 
     #[test]

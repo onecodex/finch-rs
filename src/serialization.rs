@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::convert::TryFrom;
 use std::fmt;
 use std::io::{BufRead, Write};
 use std::mem;
@@ -7,10 +8,11 @@ use std::mem;
 use capnp::message;
 #[cfg(feature = "mash_format")]
 use capnp::serialize as capnp_serialize;
+use failure::{bail, format_err};
 use serde::de::{self, Deserialize, Deserializer, Visitor};
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 
-use crate::filtering::{filter_sketch, FilterParams};
+use crate::filtering::FilterParams;
 use crate::hash_schemes::{ItemHash, KmerCount};
 #[cfg(feature = "mash_format")]
 use crate::mash_capnp::min_hash;
@@ -32,7 +34,7 @@ pub struct SketchDistance {
 }
 
 #[allow(non_snake_case)]
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Sketch {
     pub name: String,
     pub seqLength: Option<u64>,
@@ -40,6 +42,44 @@ pub struct Sketch {
     pub comment: Option<String>,
     pub filters: Option<HashMap<String, String>>,
     pub hashes: Vec<KmerCount>,
+}
+
+impl Sketch {
+    pub fn new(
+        name: &str,
+        length: u64,
+        n_kmers: u64,
+        kmercounts: Vec<KmerCount>,
+        filters: &HashMap<String, String>,
+    ) -> Self {
+        Sketch {
+            name: String::from(name),
+            seqLength: Some(length),
+            numValidKmers: Some(n_kmers),
+            comment: Some(String::from("")),
+            filters: Some(filters.clone()),
+            hashes: kmercounts,
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.hashes.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.hashes.is_empty()
+    }
+
+    pub fn apply_filtering(&mut self, filters: &FilterParams) -> bool {
+        let (filtered_hashes, low_abun) = filters.filter_sketch(&self.hashes);
+        let mut filter_stats = filters.serialize_filter_params();
+        if let Some(la) = low_abun {
+            filter_stats.insert(String::from("minCopies"), la.to_string());
+        }
+        self.hashes = filtered_hashes;
+        self.filters = Some(filter_stats);
+        true
+    }
 }
 
 impl Serialize for Sketch {
@@ -84,7 +124,7 @@ impl<'de> Deserialize<'de> for Sketch {
             pub filters: Option<HashMap<String, String>>,
             hashes: Vec<QuotedU64>,
             kmers: Option<Vec<String>>,
-            counts: Option<Vec<u16>>,
+            counts: Option<Vec<u64>>,
         }
 
         let mut jsketch = JSONSketch::deserialize(deserializer)?;
@@ -132,37 +172,41 @@ pub struct MultiSketch {
     pub sketches: Vec<Sketch>,
 }
 
-impl Sketch {
-    pub fn new(
-        name: &str,
-        length: u64,
-        n_kmers: u64,
-        kmercounts: Vec<KmerCount>,
-        filters: &HashMap<String, String>,
-    ) -> Self {
-        Sketch {
-            name: String::from(name),
-            seqLength: Some(length),
-            numValidKmers: Some(n_kmers),
-            comment: Some(String::from("")),
-            filters: Some(filters.clone()),
-            hashes: kmercounts,
+impl MultiSketch {
+    pub fn extend(&mut self, other: &MultiSketch, name: &str) -> FinchResult<()> {
+        // kmer, hashType, hashSeed, and hashBits must be same
+        if self.kmer != other.kmer {
+            bail!(
+                "{} has a different kmer length ({}) from others ({})",
+                name,
+                self.kmer,
+                other.kmer
+            );
+        } else if self.hashType != other.hashType {
+            bail!(
+                "{} used a different hash ({}) from others ({})",
+                name,
+                self.hashType,
+                other.hashType
+            );
+        } else if self.hashSeed != other.hashSeed {
+            bail!(
+                "{} had a different hash seed ({}) from others ({})",
+                name,
+                self.hashSeed,
+                other.hashSeed
+            );
+        } else if self.hashBits != other.hashBits {
+            bail!(
+                "{} used a different length hash ({}) from others ({})",
+                name,
+                self.hashBits,
+                other.hashBits
+            );
         }
-    }
 
-    pub fn len(&self) -> usize {
-        self.hashes.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.hashes.is_empty()
-    }
-
-    pub fn apply_filtering(&mut self, filters: &FilterParams) -> bool {
-        let (filtered_hashes, filter_stats) = filter_sketch(&self.hashes, &filters);
-        self.hashes = filtered_hashes;
-        self.filters = Some(filter_stats);
-        true
+        self.sketches.extend(other.sketches.clone());
+        Ok(())
     }
 }
 
@@ -214,7 +258,12 @@ pub fn write_mash_file(mut file: &mut dyn Write, sketches: &MultiSketch) -> Finc
             }
             let mash_counts = mash_sketch.init_counts32(sketch.hashes.len() as u32);
             for (j, hash) in sketch.hashes.iter().enumerate() {
-                mash_counts.reborrow().set(j as u32, u32::from(hash.count));
+                mash_counts.reborrow().set(
+                    j as u32,
+                    TryFrom::try_from(hash.count).map_err(|_| {
+                        format_err!("Counts greater than 32-bit not supported in mash files")
+                    })?,
+                );
             }
         }
     }
@@ -271,7 +320,7 @@ pub fn read_mash_file(mut file: &mut dyn BufRead) -> FinchResult<MultiSketch> {
                 .map(|(h, c)| KmerCount {
                     hash: h as ItemHash,
                     kmer: Vec::new(),
-                    count: c as u16,
+                    count: u64::from(c),
                     extra_count: 0,
                 })
                 .collect()
