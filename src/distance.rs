@@ -1,7 +1,7 @@
 use ndarray::Array2;
 
-use crate::hash_schemes::KmerCount;
 use crate::serialization::SketchDistance;
+use crate::sketch_schemes::KmerCount;
 
 pub fn distance(
     sketch1: &[KmerCount],
@@ -29,9 +29,9 @@ pub fn distance(
     Ok(SketchDistance {
         containment,
         jaccard,
-        mashDistance: f64::min(1f64, f64::max(0f64, mash_distance)),
-        commonHashes: common,
-        totalHashes: total,
+        mash_distance: f64::min(1f64, f64::max(0f64, mash_distance)),
+        common_hashes: common,
+        total_hashes: total,
         query: sketch1_name.to_string(),
         reference: sketch2_name.to_string(),
     })

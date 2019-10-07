@@ -1,7 +1,7 @@
 use std::cmp;
 use std::collections::HashMap;
 
-use crate::hash_schemes::KmerCount;
+use crate::sketch_schemes::KmerCount;
 use crate::statistics::hist;
 
 /// Used to pass around filter options for sketching
@@ -70,9 +70,12 @@ impl FilterParams {
     }
 }
 
-/// Determines a dynamic filtering threshold for low abundance kmers
+/// Determines a dynamic filtering threshold for low abundance kmers. The
+/// cutoff returned is the lowest number of counts that should be included
+/// in any final results.
 ///
-/// Useful for removing, e.g. kmers containing sequencing errors
+/// Useful for removing, e.g. low-abundance kmers arising from sequencing
+/// errors
 ///
 pub fn guess_filter_threshold(sketch: &[KmerCount], filter_level: f32) -> u64 {
     let hist_data = hist(sketch);
@@ -84,7 +87,8 @@ pub fn guess_filter_threshold(sketch: &[KmerCount], filter_level: f32) -> u64 {
     let cutoff_amt = filter_level * total_counts;
 
     // calculate the coverage that N% of the weighted data is above
-    let mut wgt_cutoff: usize = 1;
+    // note wgt_cutoff is an index now *not* a number of counts
+    let mut wgt_cutoff: usize = 0;
     let mut cum_count: u64 = 0;
     for count in &hist_data {
         cum_count += wgt_cutoff as u64 * *count as u64;
@@ -94,16 +98,17 @@ pub fn guess_filter_threshold(sketch: &[KmerCount], filter_level: f32) -> u64 {
         wgt_cutoff += 1;
     }
 
-    if wgt_cutoff <= 2 {
-        return wgt_cutoff as u64;
+    // special case if the cutoff is the first value
+    if wgt_cutoff == 0 {
+        return 1;
     }
 
-    // now find the right-most global maxima
+    // now find the minima within the window to the left
     let win_size = cmp::max(1, wgt_cutoff / 20);
     let mut sum: u64 = hist_data[..win_size].iter().sum();
     let mut lowest_val = sum;
-    let mut lowest_idx = win_size;
-    for (i, j) in (0..wgt_cutoff - win_size - 1).zip(win_size..wgt_cutoff - 1) {
+    let mut lowest_idx = win_size - 1;
+    for (i, j) in (0..wgt_cutoff - win_size).zip(win_size..wgt_cutoff) {
         if sum <= lowest_val {
             lowest_val = sum;
             lowest_idx = j;
@@ -112,7 +117,7 @@ pub fn guess_filter_threshold(sketch: &[KmerCount], filter_level: f32) -> u64 {
         sum += hist_data[j];
     }
 
-    lowest_idx as u64
+    lowest_idx as u64 + 1
 }
 
 #[test]
@@ -221,6 +226,16 @@ fn test_guess_filter_threshold() {
     ];
     let cutoff = guess_filter_threshold(&sketch, 0.1);
     assert_eq!(cutoff, 1);
+
+    // check that we don't overflow
+    let sketch = vec![KmerCount {
+        hash: 2,
+        kmer: vec![],
+        count: 2,
+        extra_count: 0,
+    }];
+    let cutoff = guess_filter_threshold(&sketch, 1.);
+    assert_eq!(cutoff, 2);
 }
 
 pub fn filter_abundance(

@@ -10,19 +10,19 @@ use std::io::{stdin, Read};
 use std::path::Path;
 use std::result::Result as StdResult;
 
-use failure::{bail, format_err, Error};
+use failure::{format_err, Error};
 use needletail::formats::parse_sequence_reader;
 use rayon::prelude::*;
 
 use crate::filtering::FilterParams;
-use crate::hash_schemes::minhashes::MinHashKmers;
-use crate::hash_schemes::HashScheme;
 use crate::serialization::{MultiSketch, Sketch};
+use crate::sketch_schemes::SketchParams;
 
 pub mod distance;
 pub mod filtering;
-pub mod hash_schemes;
-// TODO: it would be nice if there was a `pub(in main)` or something for main_parsing?
+pub mod sketch_schemes;
+// it would be nice if there was a `pub(in main)` or something for
+// main_parsing so we don't import it for `lib` itself
 pub mod main_parsing;
 #[cfg(feature = "mash_format")]
 mod mash_capnp;
@@ -33,75 +33,47 @@ pub mod statistics;
 
 pub type Result<T> = StdResult<T, Error>;
 
-pub fn mash_files(
+pub fn sketch_files(
     filenames: &[&str],
-    n_hashes: usize,
-    final_size: usize,
-    kmer_length: u8,
+    sketch_params: &SketchParams,
     filters: &FilterParams,
-    no_strict: bool,
-    seed: u64,
 ) -> Result<MultiSketch> {
     let sketches: Result<Vec<Sketch>> = filenames
         .par_iter()
         .map(|filename| {
-            let sketch = if filename == &"-" {
-                // special case for stdin
-                let sin = stdin();
-                mash_stream(
-                    sin.lock(),
-                    filename,
-                    n_hashes,
-                    final_size,
-                    kmer_length,
-                    &filters,
-                    no_strict,
-                    seed,
-                )?
+            // open the file with a special case to handle stdin
+            let sin = stdin();
+            let reader: Box<dyn Read> = if filename == &"-" {
+                Box::new(sin.lock())
             } else {
-                mash_stream(
-                    File::open(&Path::new(filename))?,
-                    filename,
-                    n_hashes,
-                    final_size,
-                    kmer_length,
-                    &filters,
-                    no_strict,
-                    seed,
-                )?
+                Box::new(File::open(&Path::new(filename))?)
             };
-            Ok(sketch)
+            // sketch!
+            Ok(sketch_stream(reader, filename, sketch_params, &filters)?)
         })
         .collect();
+    let (hash_type, hash_bits, hash_seed) = sketch_params.hash_info();
     Ok(MultiSketch {
-        kmer: kmer_length,
+        kmer: sketch_params.k(),
         alphabet: String::from("ACGT"),
-        preserveCase: false,
+        preserve_case: false,
         canonical: true,
-        sketchSize: final_size as u32,
-        hashType: String::from("MurmurHash3_x64_128"),
-        hashBits: 64u16,
-        hashSeed: seed,
+        sketch_size: sketch_params.expected_size() as u32,
+        hash_type: String::from(hash_type),
+        hash_bits,
+        hash_seed,
         sketches: sketches?,
     })
 }
 
-pub fn mash_stream<R: Read>(
-    reader: R,
+pub fn sketch_stream<'a>(
+    reader: Box<dyn Read + 'a>,
     name: &str,
-    n_hashes: usize,
-    final_size: usize,
-    kmer_length: u8,
+    sketch_params: &SketchParams,
     filters: &FilterParams,
-    no_strict: bool,
-    seed: u64,
 ) -> Result<Sketch> {
-    let mut seq_len = 0u64;
     let mut filters = filters.clone();
-    let mut minhash = match filters.filter_on {
-        Some(true) | None => MinHashKmers::new(n_hashes, kmer_length, seed),
-        Some(false) => MinHashKmers::new(final_size, kmer_length, seed),
-    };
+    let mut sketcher = sketch_params.create_sketcher();
     parse_sequence_reader(
         reader,
         |seq_type| {
@@ -115,14 +87,13 @@ pub fn mash_stream<R: Read>(
             }
         },
         |seq| {
-            seq_len += seq.seq.len() as u64;
-            minhash.process(seq);
+            sketcher.process(seq);
         },
     )
     .map_err(|e| format_err!("{}", e.to_string()))?;
 
-    let n_kmers = minhash.total_kmers() as u64;
-    let hashes = minhash.into_vec();
+    let (seq_len, n_kmers) = sketcher.total_bases_and_kmers();
+    let hashes = sketcher.to_vec();
 
     // do filtering
     let (mut filtered_hashes, low_abun) = filters.filter_sketch(&hashes);
@@ -131,14 +102,7 @@ pub fn mash_stream<R: Read>(
         filter_stats.insert(String::from("minCopies"), la.to_string());
     }
 
-    filtered_hashes.truncate(final_size);
-    if !no_strict && filtered_hashes.len() < final_size {
-        bail!(
-            "{} had too few kmers ({}) to sketch",
-            name,
-            filtered_hashes.len(),
-        );
-    }
+    sketch_params.process_post_filter(&mut filtered_hashes, name)?;
 
     Ok(Sketch::new(
         name,

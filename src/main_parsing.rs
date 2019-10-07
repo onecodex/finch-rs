@@ -5,6 +5,8 @@ use clap::{App, Arg, ArgMatches};
 use failure::{bail, format_err};
 
 use crate::filtering::FilterParams;
+use crate::serialization::MultiSketch;
+use crate::sketch_schemes::SketchParams;
 use crate::Result;
 
 pub fn get_int_arg<T: FromStr>(matches: &ArgMatches, key: &str) -> Result<T> {
@@ -80,19 +82,23 @@ pub fn parse_filter_options(matches: &ArgMatches, kmer_length: u8) -> Result<Fil
         (false, true) => Some(false),
         (false, false) => None,
     };
+
     let min_abun_filter = if matches.occurrences_of("min_abun_filter") > 0 {
         Some(get_int_arg::<u64>(matches, "min_abun_filter")?)
     } else {
         None
     };
+
     let max_abun_filter = if matches.occurrences_of("max_abun_filter") > 0 {
         Some(get_int_arg::<u64>(matches, "max_abun_filter")?)
     } else {
         None
     };
+
     let mut err_filter =
         get_float_arg::<f32>(matches, "err_filter", 100f64 / f64::from(kmer_length))?;
     err_filter *= f32::from(kmer_length) / 100f32;
+
     let strand_filter = get_float_arg::<f32>(matches, "strand_filter", 1f64)?;
 
     Ok(FilterParams {
@@ -101,4 +107,166 @@ pub fn parse_filter_options(matches: &ArgMatches, kmer_length: u8) -> Result<Fil
         err_filter,
         strand_filter,
     })
+}
+
+pub fn add_sketch_options<'a, 'b>(app: App<'a, 'b>) -> App<'a, 'b> {
+    // note we're defining groups for the arguments depending on which
+    // sketch_type they're used with, but clap doesn't allow us to flag
+    // argument conflicts/requirements based off another argument's value
+    app.arg(Arg::with_name("sketch_type")
+         .short("s")
+         .long("sketch-type")
+         .takes_value(true)
+         .possible_values(&["mash", "scaled", "none"])
+         .default_value("mash")
+         .help("What type of sketching to perform"))
+    .arg(Arg::with_name("kmer_length")
+         .short("k")
+         .long("kmer-length")
+         .takes_value(true)
+         .default_value_if("sketch_type", Some("none"), "4")
+         .default_value("21")
+         .help("Length of kmers to use"))
+    .arg(Arg::with_name("n_hashes")
+         .short("n")
+         .long("n-hashes")
+         .takes_value(true)
+         // .groups(&["mash", "scaled"])
+         .default_value("1000")
+         .help("How many kmers/hashes to store [`sketch-type=mash` and `sketch-type=scaled`]"))
+    .arg(Arg::with_name("scale")
+         .long("scale")
+         .takes_value(true)
+         .default_value("0.001")
+         // .group("scaled")
+         .help("Sketch scaling factor [`sketch-type=scaled` only]"))
+    .arg(Arg::with_name("seed")
+         .long("seed")
+         .takes_value(true)
+         // .groups(&["mash", "scaled"])
+         .default_value("0")
+         .help("Seed murmurhash with this value [`sketch-type=mash` and `sketch-type=scaled`]"))
+    .arg(Arg::with_name("oversketch")
+         .long("oversketch")
+         .takes_value(true)
+         // .group("mash")
+         .default_value("200")
+         .help("The amount of extra sketching to do before filtering. This is only a safety to allow sketching e.g. high-coverage files with lots of error-generated uniquemers and should not change the final sketch [`sketch-type=mash` only]"))
+    .arg(Arg::with_name("no_strict")
+         .short("N")
+         .long("no-strict")
+         // .group("mash")
+         .help("Allow sketching files with fewer kmers than `n_hashes` [`sketch-type=mash` only]"))
+}
+
+pub fn parse_sketch_options(
+    matches: &ArgMatches,
+    kmer_length: u8,
+    filters_enabled: Option<bool>,
+) -> Result<SketchParams> {
+    Ok(match matches.value_of("sketch_type").unwrap_or("mash") {
+        "mash" => {
+            if matches.occurrences_of("scale") != 0 {
+                bail!("`scale` can not be specified for `mash` sketch types")
+            }
+            let final_size: usize = get_int_arg(matches, "n_hashes")?;
+            let oversketch: usize = get_int_arg(matches, "oversketch")?;
+            let sketch_size = final_size * oversketch;
+
+            let kmers_to_sketch = match filters_enabled {
+                Some(true) | None => sketch_size,
+                Some(false) => final_size,
+            };
+
+            SketchParams::Mash {
+                kmers_to_sketch,
+                final_size,
+                no_strict: matches.is_present("no_strict"),
+                kmer_length,
+                hash_seed: get_int_arg(matches, "seed")?,
+            }
+        },
+        "scaled" => {
+            if matches.occurrences_of("oversketch") != 0 {
+                bail!("`oversketch` can not be specified for `scaled` sketch types")
+            }
+            if matches.occurrences_of("no_strict") != 0 {
+                bail!("`no_strict` can not be specified for `scaled` sketch types")
+            }
+            let kmers_to_sketch: usize = get_int_arg(matches, "n_hashes")?;
+            let scale: f64 = get_float_arg(matches, "scale", 1.)?;
+            SketchParams::Scaled {
+                kmers_to_sketch,
+                kmer_length,
+                scale,
+                hash_seed: get_int_arg(matches, "seed")?,
+            }
+        },
+        "none" => {
+            if matches.occurrences_of("n_hashes") != 0 {
+                bail!("`n_hashes` can not be specified for `none` sketch types")
+            }
+            if matches.occurrences_of("seed") != 0 {
+                bail!("`seed` can not be specified for `none` sketch types")
+            }
+            if matches.occurrences_of("oversketch") != 0 {
+                bail!("`oversketch` can not be specified for `none` sketch types")
+            }
+            if matches.occurrences_of("no_strict") != 0 {
+                bail!("`no_strict` can not be specified for `none` sketch types")
+            }
+            if matches.occurrences_of("scale") != 0 {
+                bail!("`scale` can not be specified for `none` sketch types")
+            }
+            SketchParams::AllCounts {
+                kmer_length,
+            }
+        },
+        _ => panic!("A unknown sketch type was selected"),
+    })
+}
+
+pub fn update_sketch_params(
+    matches: &ArgMatches,
+    sketch_params: &mut SketchParams,
+    multisketch: &MultiSketch,
+    name: &str,
+) -> Result<()> {
+    // FIXME: check that the sketching type is concordant?
+
+    // if arguments weren't provided use the ones from the multisketch
+    match sketch_params {
+        SketchParams::Mash {
+            final_size,
+            kmer_length,
+            hash_seed,
+            ..
+        } => {
+            if matches.occurrences_of("n_hashes") == 0 {
+                *final_size = multisketch.sketch_size as usize;
+            }
+            if matches.occurrences_of("kmer_length") == 0 {
+                *kmer_length = multisketch.kmer;
+            } else if *kmer_length != multisketch.kmer {
+                bail!(
+                    "Specified kmer length {} does not match {} from sketch {}",
+                    kmer_length,
+                    multisketch.kmer,
+                    name
+                );
+            }
+            if matches.occurrences_of("seed") == 0 {
+                *hash_seed = multisketch.hash_seed;
+            } else if *hash_seed != multisketch.hash_seed {
+                bail!(
+                    "Specified hash seed {} does not match {} from sketch {}",
+                    hash_seed,
+                    multisketch.hash_seed,
+                    name
+                );
+            }
+        }
+        _ => {}
+    }
+    Ok(())
 }

@@ -4,28 +4,30 @@ use std::usize;
 
 use needletail::{Sequence, SequenceRecord};
 
-use crate::hash_schemes::hashing::{hash_f, HashedItem, NoHashHasher};
-use crate::hash_schemes::{HashScheme, ItemHash, KmerCount};
+use crate::sketch_schemes::hashing::{hash_f, HashedItem, NoHashHasher};
+use crate::sketch_schemes::{ItemHash, KmerCount, SketchScheme};
 
 #[derive(Clone, Debug)]
-pub struct ScaledKmers {
+pub struct ScaledSketcher {
     hashes: BinaryHeap<HashedItem<Vec<u8>>>,
     counts: HashMap<ItemHash, (u64, u64), BuildHasherDefault<NoHashHasher>>,
     kmer_length: u8,
     total_kmers: u64,
+    total_bases: u64,
     size: usize,
     max_hash: u64,
     seed: u64,
 }
 
-impl ScaledKmers {
+impl ScaledSketcher {
     pub fn new(size: usize, scale: f64, kmer_length: u8, seed: u64) -> Self {
         let iscale = (1. / scale) as u64;
-        ScaledKmers {
+        ScaledSketcher {
             hashes: BinaryHeap::with_capacity(size),
             counts: HashMap::with_capacity_and_hasher(size, BuildHasherDefault::default()),
             kmer_length,
             total_kmers: 0,
+            total_bases: 0,
             size,
             max_hash: u64::max_value() / iscale,
             seed,
@@ -59,8 +61,9 @@ impl ScaledKmers {
     }
 }
 
-impl HashScheme for ScaledKmers {
+impl SketchScheme for ScaledSketcher {
     fn process(&mut self, seq: SequenceRecord) {
+        self.total_bases += seq.seq.len() as u64;
         let rc = seq.reverse_complement();
         for (_, kmer, is_rev_complement) in
             seq.normalize(false).canonical_kmers(self.kmer_length, &rc)
@@ -70,12 +73,12 @@ impl HashScheme for ScaledKmers {
         }
     }
 
-    fn total_kmers(&self) -> usize {
-        self.total_kmers as usize
+    fn total_bases_and_kmers(&self) -> (u64, u64) {
+        (self.total_bases, self.total_kmers)
     }
 
-    fn into_vec(self) -> Vec<KmerCount> {
-        let mut vec = self.hashes.into_sorted_vec();
+    fn to_vec(&self) -> Vec<KmerCount> {
+        let mut vec = self.hashes.clone().into_sorted_vec();
 
         let mut results = Vec::with_capacity(vec.len());
         for item in vec.drain(..) {
@@ -101,12 +104,12 @@ mod test {
     #[test]
     fn test_minhashkmers_scaled_1() {
         // Scaled=1 should hold all possible kmers
-        let mut queue = ScaledKmers::new(3, 1., 2, 42);
+        let mut queue = ScaledSketcher::new(3, 1., 2, 42);
         queue.push(b"ca", 0);
         queue.push(b"cc", 1);
         queue.push(b"ac", 0);
         queue.push(b"ac", 1);
-        let array = queue.into_vec();
+        let array = queue.to_vec();
         assert_eq!(array[0].kmer, b"cc");
         assert_eq!(array[0].count, 1);
         assert_eq!(array[0].extra_count, 1);
@@ -124,12 +127,12 @@ mod test {
     fn test_minhashkmers_scaled_1000() {
         // Scaled=1000 should exclude all these hashes,
         // but since only 3 are added and size==3 they should all be present
-        let mut queue = ScaledKmers::new(3, 0.001, 2, 42);
+        let mut queue = ScaledSketcher::new(3, 0.001, 2, 42);
         queue.push(b"ca", 0);
         queue.push(b"cc", 1);
         queue.push(b"ac", 0);
         queue.push(b"ac", 1);
-        let array = queue.into_vec();
+        let array = queue.to_vec();
         assert_eq!(array[0].kmer, b"cc");
         assert_eq!(array[0].count, 1);
         assert_eq!(array[0].extra_count, 1);
@@ -146,51 +149,51 @@ mod test {
     #[test]
     fn test_minhashkmers_eviction() {
         // try again, but evict one of the kmers
-        let mut queue = ScaledKmers::new(1, 0.01, 4, 42);
+        let mut queue = ScaledSketcher::new(1, 0.01, 4, 42);
         // random kmer that hashes above max_hash
         queue.push(b"AAAA", 0);
         // now fill with kmers that hash below to evict it
         queue.push(b"AGTA", 0);
         queue.push(b"CCCC", 1);
         queue.push(b"ATAA", 0);
-        let array = queue.into_vec();
+        let array = queue.to_vec();
         assert_eq!(array.len(), 3, "Only small hashes should be left");
         assert!(array.iter().all(|e| e.kmer != b"AAAA"))
     }
 
     #[test]
     fn test_minhashkmers_pure_scaled_empty() {
-        let mut queue = ScaledKmers::new(0, 0.001, 2, 42);
+        let mut queue = ScaledSketcher::new(0, 0.001, 2, 42);
         // all these hashes are out of range for scaled=1000
         queue.push(b"ca", 0);
         queue.push(b"cc", 1);
         queue.push(b"ac", 0);
         queue.push(b"ac", 1);
-        let array = queue.into_vec();
+        let array = queue.to_vec();
         assert_eq!(array.len(), 0);
     }
 
     #[test]
     fn test_minhashkmers_pure_scaled() {
-        let mut queue = ScaledKmers::new(0, 0.001, 2, 42);
+        let mut queue = ScaledSketcher::new(0, 0.001, 2, 42);
         // all these hashes are out of range
         queue.push(b"ca", 0);
         queue.push(b"cc", 1);
         queue.push(b"ac", 0);
         queue.push(b"ac", 1);
-        let array = queue.into_vec();
+        let array = queue.to_vec();
         assert_eq!(array.len(), 0);
     }
 
     proptest! {
         #[test]
         fn pure_scaled_check(seq in "[ACGT]{500,}") {
-            let mut queue = ScaledKmers::new(0, 1. / 100., 2, 42);
+            let mut queue = ScaledSketcher::new(0, 1. / 100., 2, 42);
             let max_hash = u64::max_value() / 100;
             for kmer in seq.as_bytes().windows(4) {
                 queue.push(kmer, 0);
             }
-            let array = queue.into_vec();
+            let array = queue.to_vec();
             assert!(array.iter().all(|item| item.hash <= max_hash));
         }
     }

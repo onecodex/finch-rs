@@ -13,32 +13,33 @@ use serde::de::{self, Deserialize, Deserializer, Visitor};
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 
 use crate::filtering::FilterParams;
-use crate::hash_schemes::{ItemHash, KmerCount};
 #[cfg(feature = "mash_format")]
 use crate::mash_capnp::min_hash;
+use crate::sketch_schemes::{ItemHash, KmerCount};
 use crate::Result as FinchResult;
 
 pub const FINCH_EXT: &str = ".sk";
 pub const MASH_EXT: &str = ".msh";
 
-#[allow(non_snake_case)]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SketchDistance {
     pub containment: f64,
     pub jaccard: f64,
-    pub mashDistance: f64,
-    pub commonHashes: u64,
-    pub totalHashes: u64,
+    #[serde(rename = "mashDistance")]
+    pub mash_distance: f64,
+    #[serde(rename = "commonHashes")]
+    pub common_hashes: u64,
+    #[serde(rename = "totalHashes")]
+    pub total_hashes: u64,
     pub query: String,
     pub reference: String,
 }
 
-#[allow(non_snake_case)]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Sketch {
     pub name: String,
-    pub seqLength: Option<u64>,
-    pub numValidKmers: Option<u64>,
+    pub seq_length: Option<u64>,
+    pub num_valid_kmers: Option<u64>,
     pub comment: Option<String>,
     pub filters: Option<HashMap<String, String>>,
     pub hashes: Vec<KmerCount>,
@@ -54,8 +55,8 @@ impl Sketch {
     ) -> Self {
         Sketch {
             name: String::from(name),
-            seqLength: Some(length),
-            numValidKmers: Some(n_kmers),
+            seq_length: Some(length),
+            num_valid_kmers: Some(n_kmers),
             comment: Some(String::from("")),
             filters: Some(filters.clone()),
             hashes: kmercounts,
@@ -98,8 +99,8 @@ impl Serialize for Sketch {
 
         let mut state = serializer.serialize_struct("Sketch", 8)?;
         state.serialize_field("name", &self.name)?;
-        state.serialize_field("seqLength", &self.seqLength)?;
-        state.serialize_field("numValidKmers", &self.numValidKmers)?;
+        state.serialize_field("seqLength", &self.seq_length)?;
+        state.serialize_field("numValidKmers", &self.num_valid_kmers)?;
         state.serialize_field("comment", &self.comment)?;
         state.serialize_field("filters", &self.filters)?;
         state.serialize_field("hashes", &hash_list)?;
@@ -149,8 +150,8 @@ impl<'de> Deserialize<'de> for Sketch {
         }
         Ok(Sketch {
             name: jsketch.name,
-            seqLength: jsketch.seqLength,
-            numValidKmers: jsketch.numValidKmers,
+            seq_length: jsketch.seqLength,
+            num_valid_kmers: jsketch.numValidKmers,
             comment: jsketch.comment,
             filters: jsketch.filters,
             hashes: kmercount_list,
@@ -158,17 +159,21 @@ impl<'de> Deserialize<'de> for Sketch {
     }
 }
 
-#[allow(non_snake_case)]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MultiSketch {
     pub kmer: u8,
     pub alphabet: String,
-    pub preserveCase: bool,
+    #[serde(rename = "preserveCase")]
+    pub preserve_case: bool,
     pub canonical: bool,
-    pub sketchSize: u32,
-    pub hashType: String,
-    pub hashBits: u16,
-    pub hashSeed: u64,
+    #[serde(rename = "sketchSize")]
+    pub sketch_size: u32,
+    #[serde(rename = "hashType")]
+    pub hash_type: String,
+    #[serde(rename = "hashBits")]
+    pub hash_bits: u16,
+    #[serde(rename = "hashSeed")]
+    pub hash_seed: u64,
     pub sketches: Vec<Sketch>,
 }
 
@@ -182,26 +187,26 @@ impl MultiSketch {
                 self.kmer,
                 other.kmer
             );
-        } else if self.hashType != other.hashType {
+        } else if self.hash_type != other.hash_type {
             bail!(
                 "{} used a different hash ({}) from others ({})",
                 name,
-                self.hashType,
-                other.hashType
+                self.hash_type,
+                other.hash_type
             );
-        } else if self.hashSeed != other.hashSeed {
+        } else if self.hash_seed != other.hash_seed {
             bail!(
                 "{} had a different hash seed ({}) from others ({})",
                 name,
-                self.hashSeed,
-                other.hashSeed
+                self.hash_seed,
+                other.hash_seed
             );
-        } else if self.hashBits != other.hashBits {
+        } else if self.hash_bits != other.hash_bits {
             bail!(
                 "{} used a different length hash ({}) from others ({})",
                 name,
-                self.hashBits,
-                other.hashBits
+                self.hash_bits,
+                other.hash_bits
             );
         }
 
@@ -219,8 +224,8 @@ pub fn write_mash_file(mut file: &mut dyn Write, sketches: &MultiSketch) -> Finc
         mash_file.set_window_size(u32::from(sketches.kmer));
         mash_file.set_error(0.0); // TODO: from filters?
         mash_file.set_noncanonical(!sketches.canonical);
-        mash_file.set_preserve_case(sketches.preserveCase);
-        mash_file.set_hash_seed(sketches.hashSeed as u32);
+        mash_file.set_preserve_case(sketches.preserve_case);
+        mash_file.set_hash_seed(sketches.hash_seed as u32);
         mash_file.set_alphabet(&sketches.alphabet);
         // not sure what these two mean?
         let largest_size = sketches
@@ -242,10 +247,10 @@ pub fn write_mash_file(mut file: &mut dyn Write, sketches: &MultiSketch) -> Finc
             if let Some(ref comment) = sketch.comment {
                 mash_sketch.set_comment(&comment);
             }
-            if let Some(seq_length) = sketch.seqLength {
+            if let Some(seq_length) = sketch.seq_length {
                 mash_sketch.set_length64(seq_length);
             }
-            if let Some(num_valid_kmers) = sketch.numValidKmers {
+            if let Some(num_valid_kmers) = sketch.num_valid_kmers {
                 mash_sketch.set_num_valid_kmers(num_valid_kmers);
             }
             {
@@ -281,12 +286,12 @@ pub fn read_mash_file(mut file: &mut dyn BufRead) -> FinchResult<MultiSketch> {
     let mut sketches = MultiSketch {
         kmer: mash_data.get_kmer_size() as u8,
         alphabet: String::from(mash_data.get_alphabet()?),
-        preserveCase: mash_data.get_preserve_case(),
+        preserve_case: mash_data.get_preserve_case(),
         canonical: !mash_data.get_noncanonical(),
-        sketchSize: 0,
-        hashType: String::from("MurmurHash3_x64_128"),
-        hashBits: 64u16,
-        hashSeed: u64::from(mash_data.get_hash_seed()),
+        sketch_size: 0,
+        hash_type: String::from("MurmurHash3_x64_128"),
+        hash_bits: 64u16,
+        hash_seed: u64::from(mash_data.get_hash_seed()),
         sketches: Vec::new(),
     };
 
@@ -328,8 +333,8 @@ pub fn read_mash_file(mut file: &mut dyn BufRead) -> FinchResult<MultiSketch> {
 
         sketches.sketches.push(Sketch {
             name: String::from(reference.get_name()?),
-            seqLength: Some(reference.get_length64()),
-            numValidKmers: Some(reference.get_num_valid_kmers()),
+            seq_length: Some(reference.get_length64()),
+            num_valid_kmers: Some(reference.get_num_valid_kmers()),
             comment: Some(String::from(reference.get_comment()?)),
             filters: None,
             hashes: kmercounts,

@@ -4,26 +4,28 @@ use std::usize;
 
 use needletail::{Sequence, SequenceRecord};
 
-use crate::hash_schemes::hashing::{hash_f, HashedItem, NoHashHasher};
-use crate::hash_schemes::{HashScheme, ItemHash, KmerCount};
+use crate::sketch_schemes::hashing::{hash_f, HashedItem, NoHashHasher};
+use crate::sketch_schemes::{ItemHash, KmerCount, SketchScheme};
 
-#[derive(Clone)]
-pub struct MinHashKmers {
+#[derive(Clone, Debug)]
+pub struct MashSketcher {
     hashes: BinaryHeap<HashedItem<Vec<u8>>>,
     counts: HashMap<ItemHash, (u64, u64), BuildHasherDefault<NoHashHasher>>,
     kmer_length: u8,
     total_kmers: u64,
+    total_bases: u64,
     size: usize,
     seed: u64,
 }
 
-impl MinHashKmers {
+impl MashSketcher {
     pub fn new(size: usize, kmer_length: u8, seed: u64) -> Self {
-        MinHashKmers {
+        MashSketcher {
             hashes: BinaryHeap::with_capacity(size + 1),
             counts: HashMap::with_capacity_and_hasher(size, BuildHasherDefault::default()),
             kmer_length,
             total_kmers: 0,
+            total_bases: 0,
             size,
             seed,
         }
@@ -60,8 +62,9 @@ impl MinHashKmers {
     }
 }
 
-impl HashScheme for MinHashKmers {
+impl SketchScheme for MashSketcher {
     fn process(&mut self, seq: SequenceRecord) {
+        self.total_bases += seq.seq.len() as u64;
         let rc = seq.reverse_complement();
         for (_, kmer, is_rev_complement) in
             seq.normalize(false).canonical_kmers(self.kmer_length, &rc)
@@ -71,12 +74,12 @@ impl HashScheme for MinHashKmers {
         }
     }
 
-    fn total_kmers(&self) -> usize {
-        self.total_kmers as usize
+    fn total_bases_and_kmers(&self) -> (u64, u64) {
+        (self.total_bases, self.total_kmers)
     }
 
-    fn into_vec(self) -> Vec<KmerCount> {
-        let mut vec = self.hashes.into_sorted_vec();
+    fn to_vec(&self) -> Vec<KmerCount> {
+        let mut vec = self.hashes.clone().into_sorted_vec();
 
         let mut results = Vec::with_capacity(vec.len());
         for item in vec.drain(..) {
@@ -95,12 +98,12 @@ impl HashScheme for MinHashKmers {
 
 #[test]
 fn test_minhashkmers() {
-    let mut queue = MinHashKmers::new(3, 2, 42);
+    let mut queue = MashSketcher::new(3, 2, 42);
     queue.push(b"ca", 0);
     queue.push(b"cc", 1);
     queue.push(b"ac", 0);
     queue.push(b"ac", 1);
-    let array = queue.into_vec();
+    let array = queue.to_vec();
     assert_eq!(array[0].kmer, b"cc");
     assert_eq!(array[0].count, 1);
     assert_eq!(array[0].extra_count, 1);

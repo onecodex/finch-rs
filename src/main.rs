@@ -18,9 +18,12 @@ use finch::serialization::{
     read_mash_file, write_mash_file, MultiSketch, Sketch, SketchDistance, FINCH_EXT, MASH_EXT,
 };
 use finch::statistics::{cardinality, hist};
-use finch::{mash_files, Result};
+use finch::{sketch_files, Result};
 
-use finch::main_parsing::{add_filter_options, get_float_arg, get_int_arg, parse_filter_options};
+use finch::main_parsing::{
+    add_filter_options, add_sketch_options, get_float_arg, get_int_arg, parse_filter_options,
+    parse_sketch_options, update_sketch_params,
+};
 
 fn add_output_options<'a, 'b>(app: App<'a, 'b>) -> App<'a, 'b> {
     app.arg(
@@ -66,35 +69,6 @@ where
     Ok(())
 }
 
-fn add_kmer_options<'a, 'b>(app: App<'a, 'b>) -> App<'a, 'b> {
-    app.arg(Arg::with_name("n_hashes")
-         .short("n")
-         .long("n-hashes")
-         .help("How many kmers/hashes to store")
-         .takes_value(true)
-         .default_value("1000"))
-    .arg(Arg::with_name("seed")
-         .long("seed")
-         .help("Seed murmurhash with this value")
-         .takes_value(true)
-         .default_value("0"))
-    .arg(Arg::with_name("kmer_length")
-         .short("k")
-         .long("kmer-length")
-         .help("Length of kmers to use")
-         .takes_value(true)
-         .default_value("21"))
-    .arg(Arg::with_name("oversketch")
-         .long("oversketch")
-         .help("The amount of extra sketching to do before filtering. This is only a safety to allow sketching e.g. high-coverage files with lots of error-generated uniquemers and should not change the final sketch")
-         .takes_value(true)
-         .default_value("200"))
-    .arg(Arg::with_name("no_strict")
-         .short("N")
-         .long("no-strict")
-         .help("Allow sketching files with fewer kmers than `n_hashes`"))
-}
-
 fn main() {
     // see https://github.com/rust-lang-nursery/failure/issues/76
     if let Err(err) = run() {
@@ -110,7 +84,7 @@ fn main() {
             writeln!(serr, "Caused by: {}", cause).expect("unable to write error to stderr");
         }
         // The following assumes an `Error`, use `if let Some(backtrace) ...` for a `Fail`
-        writeln!(serr, "{:?}", err.backtrace()).expect("unable to write error to stderr");
+        write!(serr, "{:?}", err.backtrace()).expect("unable to write error to stderr");
         exit(1);
     }
 }
@@ -134,7 +108,7 @@ fn run() -> Result<()> {
     }
     sketch_command = add_output_options(sketch_command);
     sketch_command = add_filter_options(sketch_command);
-    sketch_command = add_kmer_options(sketch_command);
+    sketch_command = add_sketch_options(sketch_command);
 
     let mut dist_command = SubCommand::with_name("dist")
         .about("Compute distances between sketches")
@@ -176,7 +150,7 @@ fn run() -> Result<()> {
         );
     dist_command = add_output_options(dist_command);
     dist_command = add_filter_options(dist_command);
-    dist_command = add_kmer_options(dist_command);
+    dist_command = add_sketch_options(dist_command);
 
     let mut hist_command = SubCommand::with_name("hist")
         .about("Display histograms of kmer abundances")
@@ -188,7 +162,7 @@ fn run() -> Result<()> {
         );
     hist_command = add_output_options(hist_command);
     hist_command = add_filter_options(hist_command);
-    hist_command = add_kmer_options(hist_command);
+    hist_command = add_sketch_options(hist_command);
 
     let mut info_command = SubCommand::with_name("info")
         .about("Display basic statistics")
@@ -200,7 +174,7 @@ fn run() -> Result<()> {
         );
     info_command = add_output_options(info_command);
     info_command = add_filter_options(info_command);
-    info_command = add_kmer_options(info_command);
+    info_command = add_sketch_options(info_command);
 
     let matches = App::new("finch")
         .version(crate_version!())
@@ -304,7 +278,7 @@ fn run() -> Result<()> {
 
         for sketch in multisketch.sketches.iter() {
             print!("{}", &sketch.name);
-            if let Some(l) = sketch.seqLength {
+            if let Some(l) = sketch.seq_length {
                 println!(" (from {}bp)", l);
             } else {
                 println!();
@@ -353,14 +327,9 @@ fn generate_sketch_files(matches: &ArgMatches, file_ext: &str) -> Result<()> {
         .ok_or_else(|| format_err!("Bad INPUT"))?
         .collect();
 
-    let final_sketch_size: usize = get_int_arg(matches, "n_hashes")?;
-    let oversketch: usize = get_int_arg(matches, "oversketch")?;
-    let sketch_size = final_sketch_size * oversketch;
-    let no_strict = matches.is_present("no_strict");
-
-    let seed = get_int_arg(matches, "seed")?;
     let kmer_length: u8 = get_int_arg(matches, "kmer_length")?;
     let filters = parse_filter_options(matches, kmer_length)?;
+    let sketch_params = parse_sketch_options(matches, kmer_length, filters.filter_on)?;
 
     for filename in filenames {
         if filename.ends_with(".json")
@@ -370,15 +339,7 @@ fn generate_sketch_files(matches: &ArgMatches, file_ext: &str) -> Result<()> {
             bail!("Filename {} is not a sequence file?", filename);
         }
 
-        let multisketch = mash_files(
-            &[filename],
-            sketch_size,
-            final_sketch_size,
-            kmer_length,
-            &filters,
-            no_strict,
-            seed,
-        )?;
+        let multisketch = sketch_files(&[filename], &sketch_params, &filters)?;
 
         let out_filename = filename.to_string() + file_ext;
         let mut out = File::create(&out_filename)
@@ -411,42 +372,19 @@ fn parse_mash_files(matches: &ArgMatches) -> Result<MultiSketch> {
         }
     }
 
-    let mut final_sketch_size: usize = get_int_arg(matches, "n_hashes")?;
-    let oversketch: usize = get_int_arg(matches, "oversketch")?;
-    let sketch_size = final_sketch_size * oversketch;
-    let no_strict = matches.is_present("no_strict");
-
-    let mut seed = get_int_arg(matches, "seed")?;
-    let mut kmer_length: u8 = get_int_arg(matches, "kmer_length")?;
+    let kmer_length: u8 = get_int_arg(matches, "kmer_length")?;
     let mut filters = parse_filter_options(matches, kmer_length)?;
+    let mut sketch_params = parse_sketch_options(matches, kmer_length, filters.filter_on)?;
 
     let mut filename_iter = sketch_filenames.iter();
     if let Some(first_filename) = filename_iter.next() {
         let mut multisketch = open_sketch_file(first_filename)?;
-        // if arguments weren't provided use the ones from the multisketch
-        if matches.occurrences_of("n_hashes") == 0 {
-            final_sketch_size = multisketch.sketchSize as usize;
-        }
+
+        update_sketch_params(matches, &mut sketch_params, &multisketch, first_filename)?;
+        // we also have to handle updating filter options separately because
+        // kmer_length changes how we calculate the `err_filter`
         if matches.occurrences_of("kmer_length") == 0 {
-            kmer_length = multisketch.kmer;
-            filters = parse_filter_options(matches, kmer_length)?;
-        } else if kmer_length != multisketch.kmer {
-            bail!(
-                "Specified kmer length {} does not match {} from sketch {}",
-                kmer_length,
-                multisketch.kmer,
-                first_filename
-            );
-        }
-        if matches.occurrences_of("seed") == 0 {
-            seed = multisketch.hashSeed;
-        } else if seed != multisketch.hashSeed {
-            bail!(
-                "Specified hash seed {} does not match {} from sketch {}",
-                seed,
-                multisketch.hashSeed,
-                first_filename
-            );
+            filters = parse_filter_options(matches, sketch_params.k())?;
         }
 
         // now do the filtering for the first sketch file
@@ -467,30 +405,11 @@ fn parse_mash_files(matches: &ArgMatches) -> Result<MultiSketch> {
         }
 
         // now handle the sequences
-        multisketch.extend(
-            &mash_files(
-                &seq_filenames,
-                sketch_size,
-                final_sketch_size,
-                kmer_length,
-                &filters,
-                no_strict,
-                seed,
-            )?,
-            "",
-        )?;
+        multisketch.extend(&sketch_files(&seq_filenames, &sketch_params, &filters)?, "")?;
         Ok(multisketch)
     } else {
         // now handle the sequences
-        let multisketch = mash_files(
-            &seq_filenames,
-            sketch_size,
-            final_sketch_size,
-            kmer_length,
-            &filters,
-            no_strict,
-            seed,
-        )?;
+        let multisketch = sketch_files(&seq_filenames, &sketch_params, &filters)?;
         Ok(multisketch)
     }
 }
@@ -517,7 +436,7 @@ fn calc_sketch_distances(
                 mash_mode,
             )
             .unwrap();
-            if distance.mashDistance <= max_distance {
+            if distance.mash_distance <= max_distance {
                 distances.push(distance);
             }
         }
