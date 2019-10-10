@@ -15,7 +15,7 @@ use serde::ser::{Serialize, SerializeStruct, Serializer};
 use crate::filtering::FilterParams;
 #[cfg(feature = "mash_format")]
 use crate::mash_capnp::min_hash;
-use crate::sketch_schemes::{ItemHash, KmerCount};
+use crate::sketch_schemes::{ItemHash, KmerCount, SketchParams};
 use crate::Result as FinchResult;
 
 pub const FINCH_EXT: &str = ".sk";
@@ -174,6 +174,7 @@ pub struct MultiSketch {
     pub hash_bits: u16,
     #[serde(rename = "hashSeed")]
     pub hash_seed: u64,
+    pub scale: Option<f64>,
     pub sketches: Vec<Sketch>,
 }
 
@@ -212,6 +213,40 @@ impl MultiSketch {
 
         self.sketches.extend(other.sketches.clone());
         Ok(())
+    }
+
+    pub fn get_params(&self) -> FinchResult<SketchParams> {
+        Ok(match (&*self.hash_type, self.scale) {
+            ("MurmurHash3_x64_128", None) => {
+                if self.hash_bits != 64 {
+                    bail!("Multisketch has incompatible hash size ({} != 64)", self.hash_bits);
+                }
+                SketchParams::Mash {
+                    kmers_to_sketch: self.sketch_size as usize,
+                    final_size: self.sketch_size as usize,
+                    no_strict: true,
+                    kmer_length: self.kmer,
+                    hash_seed: self.hash_seed,
+                }
+            },
+            ("MurmurHash3_x64_128", Some(scale)) => {
+                if self.hash_bits != 64 {
+                    bail!("Multisketch has incompatible hash size ({} != 64)", self.hash_bits);
+                }
+                SketchParams::Scaled {
+                    kmers_to_sketch: self.sketch_size as usize,
+                    kmer_length: self.kmer,
+                    scale: scale,
+                    hash_seed: self.hash_seed,
+                }
+            },
+            ("None", _) => {
+                SketchParams::AllCounts {
+                    kmer_length: self.kmer,
+                }
+            },
+            (x, _) => bail!("{} sketch type is not supported", x),
+        })
     }
 }
 
@@ -292,6 +327,7 @@ pub fn read_mash_file(mut file: &mut dyn BufRead) -> FinchResult<MultiSketch> {
         hash_type: String::from("MurmurHash3_x64_128"),
         hash_bits: 64u16,
         hash_seed: u64::from(mash_data.get_hash_seed()),
+        scale: None,
         sketches: Vec::new(),
     };
 

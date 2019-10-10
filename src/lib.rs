@@ -52,7 +52,7 @@ pub fn sketch_files(
             Ok(sketch_stream(reader, filename, sketch_params, &filters)?)
         })
         .collect();
-    let (hash_type, hash_bits, hash_seed) = sketch_params.hash_info();
+    let (hash_type, hash_bits, hash_seed, scale) = sketch_params.hash_info();
     Ok(MultiSketch {
         kmer: sketch_params.k(),
         alphabet: String::from("ACGT"),
@@ -62,6 +62,7 @@ pub fn sketch_files(
         hash_type: String::from(hash_type),
         hash_bits,
         hash_seed,
+        scale,
         sketches: sketches?,
     })
 }
