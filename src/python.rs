@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
 
@@ -10,9 +9,13 @@ use pyo3::{py_exception, wrap_function};
 
 use crate::distance::{common_counts, distance, distance_scaled, minmer_matrix};
 use crate::filtering::FilterParams;
-use crate::mash_files;
-use crate::serialization::{read_mash_file, MultiSketch as MSType, Sketch as SType, MASH_EXT};
-use crate::sketch_schemes::KmerCount;
+use crate::serialization::{
+    read_finch_file, read_mash_file, write_finch_file, FinchSketch, MultiSketch as MSType,
+    FINCH_BIN_EXT, MASH_EXT,
+};
+use crate::sketch_files as rs_sketch_files;
+use crate::sketch_schemes::{KmerCount, SketchParams};
+use crate::Result as FinchResult;
 
 py_exception!(finch, FinchError, pyo3::exceptions::Exception);
 
@@ -37,6 +40,9 @@ impl Multisketch {
         let ms: MSType = if filename.ends_with(MASH_EXT) {
             read_mash_file(&mut buf_reader)
                 .map_err(|e| PyErr::new::<FinchError, _>(format!("{}", e)))?
+        } else if filename.ends_with(FINCH_BIN_EXT) {
+            read_finch_file(&mut buf_reader)
+                .map_err(|e| PyErr::new::<FinchError, _>(format!("{}", e)))?
         } else {
             // TODO: check for a finch extension?
             serde_json::from_reader(buf_reader)
@@ -45,7 +51,7 @@ impl Multisketch {
         Ok(Multisketch { ms: ms })
     }
 
-    // TODO: save method
+    // TODO: save method?
 
     #[getter]
     fn get_kmer(&self) -> PyResult<u8> {
@@ -59,7 +65,7 @@ impl Multisketch {
 
     #[getter]
     fn get_preserve_case(&self) -> PyResult<bool> {
-        Ok(self.ms.preserveCase)
+        Ok(self.ms.preserve_case)
     }
 
     #[getter]
@@ -69,33 +75,33 @@ impl Multisketch {
 
     #[getter]
     fn get_sketch_size(&self) -> PyResult<u32> {
-        Ok(self.ms.sketchSize)
+        Ok(self.ms.sketch_size)
     }
 
     #[getter]
     fn get_hash_type(&self) -> PyResult<String> {
-        Ok(self.ms.hashType.clone())
+        Ok(self.ms.hash_type.clone())
     }
 
     #[getter]
     fn get_hash_bits(&self) -> PyResult<u16> {
-        Ok(self.ms.hashBits)
+        Ok(self.ms.hash_bits)
     }
 
     #[getter]
     fn get_hash_seed(&self) -> PyResult<u64> {
-        Ok(self.ms.hashSeed)
+        Ok(self.ms.hash_seed)
     }
 
     #[getter]
     fn get_sketches(&self) -> PyResult<Vec<Sketch>> {
         // TODO: we should be doing this without a clone probably?
-        Ok(self
-            .ms
-            .sketches
-            .iter()
-            .map(|s| Sketch { s: s.clone() })
-            .collect())
+        // (i.e. returning references to things in the multisketch)
+        let sketches: Vec<FinchSketch> = (&self.ms).into();
+        let fsketches: FinchResult<Vec<Sketch>> =
+            sketches.into_iter().map(|s| Ok(Sketch { s })).collect();
+
+        fsketches.map_err(|e| PyErr::new::<FinchError, _>(format!("{}", e)))
     }
 }
 
@@ -123,16 +129,31 @@ impl PyMappingProtocol for Multisketch {
 /// sequencing file.
 #[pyclass]
 pub struct Sketch {
-    pub s: SType,
+    pub s: FinchSketch,
 }
 
 #[pymethods]
 impl Sketch {
     #[new]
-    #[args(length = 0, n_kmers = 0)]
-    fn __new__(obj: &PyRawObject, name: &str, length: u64, n_kmers: u64) -> PyResult<()> {
+    fn __new__(obj: &PyRawObject, name: &str) -> PyResult<()> {
         // TODO: take a hashes parameter: Vec<(usize, &[u8], u16, u16)>,
-        let sketch = SType::new(name, length, n_kmers, Vec::new(), &HashMap::new());
+        // and a sketch_params?
+        let sketch_params = SketchParams::Mash {
+            kmers_to_sketch: 1000,
+            final_size: 1000,
+            no_strict: true,
+            kmer_length: 21,
+            hash_seed: 0,
+        };
+        let sketch = FinchSketch {
+            name: name.to_string(),
+            seq_length: 0,
+            num_valid_kmers: 0,
+            comment: String::new(),
+            hashes: Vec::new(),
+            sketch_params,
+            filter_params: FilterParams::default(),
+        };
         obj.init(|_| Sketch { s: sketch })
     }
 
@@ -148,22 +169,22 @@ impl Sketch {
     }
 
     #[getter]
-    fn get_seq_length(&self) -> PyResult<Option<u64>> {
-        Ok(self.s.seqLength)
+    fn get_seq_length(&self) -> PyResult<u64> {
+        Ok(self.s.seq_length)
     }
 
     #[getter]
-    fn get_num_valid_kmers(&self) -> PyResult<Option<u64>> {
-        Ok(self.s.numValidKmers)
+    fn get_num_valid_kmers(&self) -> PyResult<u64> {
+        Ok(self.s.num_valid_kmers)
     }
 
     #[getter]
-    fn get_comment(&self) -> PyResult<Option<String>> {
+    fn get_comment(&self) -> PyResult<String> {
         Ok(self.s.comment.clone())
     }
 
     #[getter]
-    fn get_hashes(&self) -> PyResult<Vec<(usize, Py<PyBytes>, u16, u16)>> {
+    fn get_hashes(&self) -> PyResult<Vec<(u64, Py<PyBytes>, u64, u64)>> {
         let gil = Python::acquire_gil();
         let py = gil.python();
         Ok(self
@@ -199,7 +220,80 @@ impl Sketch {
 
     // TODO: clip to n kmers/hashes method
 
-    // TODO: merge sketches method
+    // /// merge(sketch, size, scale)
+    // ///
+    // /// Merge the second sketch into this one. If size is specified, use
+    // /// that as the new sketch's size. If scale is specified, merge the
+    // /// sketches together as if they are scaled sketches (for scaled sketches
+    // /// that have "high" hashes because they're under `size`, this will
+    // /// potentially remove those hashes if the new sketch is large enough).
+    pub fn merge(&mut self, sketch: &Sketch, size: Option<usize>) -> PyResult<()> {
+        // update my parameters from the remote's
+        self.s.seq_length += sketch.s.seq_length;
+        self.s.num_valid_kmers += sketch.s.num_valid_kmers;
+
+        // TODO: do something with filters?
+        // TODO: we should also check the sketch_params are compatible?
+
+        // now merge the hashes together; someday it would be nice to use something idiomatic like:
+        // https://users.rust-lang.org/t/solved-merge-multiple-sorted-vectors-using-iterators/6543
+        let sketch1 = &self.s.hashes;
+        let sketch2 = &sketch.s.hashes;
+
+        let mut new_hashes = Vec::with_capacity(sketch1.len() + sketch2.len());
+        let (mut i, mut j) = (0, 0);
+        while (i < sketch1.len()) && (j < sketch2.len()) {
+            if sketch1[i].hash < sketch2[j].hash {
+                new_hashes.push(sketch1[i].clone());
+                i += 1;
+            } else if sketch2[j].hash < sketch1[i].hash {
+                new_hashes.push(sketch2[j].clone());
+                j += 1;
+            } else {
+                new_hashes.push(KmerCount {
+                    hash: sketch1[i].hash,
+                    kmer: sketch1[i].kmer.clone(),
+                    count: sketch1[i].count + sketch2[j].count,
+                    extra_count: sketch1[i].extra_count + sketch2[j].extra_count,
+                });
+                i += 1;
+                j += 1;
+            }
+        }
+
+        // now clip to the appropriate size
+        let scale = self.s.sketch_params.hash_info().3;
+        match (size, scale) {
+            (Some(s), Some(sc)) => {
+                let max_hash = u64::max_value() / (1. / sc) as u64;
+                // truncate to hashes <= max/sc (or) s whichever is higher
+                new_hashes = new_hashes
+                    .iter()
+                    .enumerate()
+                    .take_while(|(ix, h)| (h.hash <= max_hash) || (*ix < s))
+                    .map(|(_, h)| h.clone())
+                    .collect();
+            }
+            (None, Some(sc)) => {
+                let max_hash = u64::max_value() / (1. / sc) as u64;
+                // truncate to hashes <= max/sc
+                new_hashes = new_hashes
+                    .iter()
+                    .take_while(|h| h.hash <= max_hash)
+                    .map(|h| h.clone())
+                    .collect();
+            }
+            (Some(s), None) => {
+                // truncate to size
+                new_hashes.truncate(s);
+            }
+            (None, None) => {
+                // no filtering
+            }
+        }
+        self.s.hashes = new_hashes;
+        Ok(())
+    }
 
     /// compare(sketch, mash_mode=False)
     ///
@@ -289,29 +383,35 @@ pub fn sketch_files(
     // TODO: allow more filter customization?
 
     // TODO: allow passing in a single file without the list
-    let mut filters = FilterParams {
+    let sketch_params = SketchParams::Mash {
+        kmers_to_sketch: n_hashes,
+        final_size: final_size.unwrap_or(n_hashes),
+        no_strict: false,
+        kmer_length,
+        hash_seed: seed,
+    };
+    let filters = FilterParams {
         filter_on: Some(filter),
         abun_filter: (None, None),
         err_filter: 1.,
         strand_filter: 0.1,
     };
-    let fsize = match final_size {
-        Some(x) => x,
-        None => n_hashes,
-    };
 
     Ok(Multisketch {
-        ms: mash_files(
-            &filenames,
-            n_hashes,
-            fsize,
-            kmer_length,
-            &mut filters,
-            false,
-            seed,
-        )
-        .map_err(|e| PyErr::new::<FinchError, _>(format!("{}", e)))?,
+        ms: rs_sketch_files(&filenames, &sketch_params, &filters)
+            .map_err(|e| PyErr::new::<FinchError, _>(format!("{}", e)))?,
     })
+}
+
+#[pyfunction]
+pub fn write_sketch_file(filename: &str, sketches: Vec<&Sketch>) -> PyResult<()> {
+    let fsketches: Vec<FinchSketch> = sketches.iter().map(|s| s.s.clone()).collect();
+
+    let mut out = File::create(&filename)
+        .map_err(|_| PyErr::new::<FinchError, _>(format!("Could not create {}", filename)))?;
+    write_finch_file(&mut out, &fsketches)
+        .map_err(|e| PyErr::new::<FinchError, _>(format!("{}", e)))?;
+    Ok(())
 }
 
 #[pymodinit]
@@ -320,6 +420,7 @@ fn finch(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<Multisketch>()?;
     m.add_class::<Sketch>()?;
     m.add_function(wrap_function!(sketch_files))?;
+    m.add_function(wrap_function!(write_sketch_file))?;
 
     Ok(())
 }

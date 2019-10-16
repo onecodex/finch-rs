@@ -4,7 +4,7 @@ use std::process::Command;
 use assert_cmd::prelude::*;
 use predicates::prelude::predicate;
 
-use finch::serialization::{read_mash_file, MultiSketch};
+use finch::serialization::{read_finch_file, read_mash_file, MultiSketch};
 
 #[test]
 fn file_doesnt_exist() -> Result<(), Box<dyn std::error::Error>> {
@@ -37,11 +37,30 @@ fn finch_sketch() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
-fn finch_sketch_msh() -> Result<(), Box<dyn std::error::Error>> {
+fn finch_sketch_bin() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin("finch")?;
     cmd.arg("sketch")
         .args(&["--n-hashes", "10"])
         .arg("-b")
+        .arg("-O")
+        .arg("tests/data/query.fa");
+    cmd.assert().success();
+
+    let output = Cursor::new(cmd.output().unwrap().stdout);
+    let mut buf_reader = BufReader::new(output);
+    let sketch: MultiSketch = read_finch_file(&mut buf_reader)?;
+    assert_eq!(sketch.kmer, 21);
+    assert_eq!(sketch.alphabet, "ACGT");
+    assert_eq!(sketch.hash_seed, 0);
+    Ok(())
+}
+
+#[test]
+fn finch_sketch_msh() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin("finch")?;
+    cmd.arg("sketch")
+        .args(&["--n-hashes", "10"])
+        .arg("-B")
         .arg("-O")
         .arg("tests/data/query.fa");
     cmd.assert().success();

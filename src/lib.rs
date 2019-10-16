@@ -1,6 +1,5 @@
 #![cfg_attr(feature = "python", feature(specialization))]
 
-#[cfg(feature = "mash_format")]
 extern crate capnp;
 #[macro_use]
 extern crate serde_derive;
@@ -24,8 +23,6 @@ pub mod sketch_schemes;
 // it would be nice if there was a `pub(in main)` or something for
 // main_parsing so we don't import it for `lib` itself
 pub mod main_parsing;
-#[cfg(feature = "mash_format")]
-mod mash_capnp;
 #[cfg(feature = "python")]
 pub mod python;
 pub mod serialization;
@@ -97,11 +94,8 @@ pub fn sketch_stream<'a>(
     let hashes = sketcher.to_vec();
 
     // do filtering
-    let (mut filtered_hashes, low_abun) = filters.filter_sketch(&hashes);
-    let mut filter_stats = filters.serialize_filter_params();
-    if let Some(la) = low_abun {
-        filter_stats.insert(String::from("minCopies"), la.to_string());
-    }
+    let mut filtered_hashes = filters.filter_sketch(&hashes);
+    let filter_stats = filters.to_serialized();
 
     sketch_params.process_post_filter(&mut filtered_hashes, name)?;
 

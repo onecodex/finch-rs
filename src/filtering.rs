@@ -9,55 +9,52 @@ use crate::statistics::hist;
 pub struct FilterParams {
     pub filter_on: Option<bool>,
     pub abun_filter: (Option<u64>, Option<u64>),
-    pub err_filter: f32,
-    pub strand_filter: f32,
+    pub err_filter: f64,
+    pub strand_filter: f64,
 }
 
 impl FilterParams {
     /// Returns the filtered kmer counts and the low abundance cutoff, if there
     /// was a different one determined from the err_filter.
-    pub fn filter_sketch(&self, hashes: &[KmerCount]) -> (Vec<KmerCount>, Option<u64>) {
+    pub fn filter_sketch(&mut self, hashes: &[KmerCount]) -> Vec<KmerCount> {
         let filter_on = self.filter_on == Some(true);
         let mut filtered_hashes = hashes.to_vec();
-        let (mut low_abun_filter, high_abun_filter) = self.abun_filter;
 
-        if filter_on && self.strand_filter > 0f32 {
+        if filter_on && self.strand_filter > 0f64 {
             filtered_hashes = filter_strands(&filtered_hashes, self.strand_filter);
         }
 
-        let mut low_filter_used = None;
-        if filter_on && self.err_filter > 0f32 {
+        if filter_on && self.err_filter > 0f64 {
             let cutoff = guess_filter_threshold(&filtered_hashes, self.err_filter);
-            if let Some(v) = low_abun_filter {
+            if let Some(v) = self.abun_filter.0 {
                 // there's an existing filter so we only use this one if it's stricter
                 if cutoff > v {
-                    low_abun_filter = Some(cutoff);
-                    low_filter_used = Some(cutoff);
+                    self.abun_filter.0 = Some(cutoff);
                 }
             } else {
                 // no filter set so just use the one we determined
-                low_abun_filter = Some(cutoff);
-                low_filter_used = Some(cutoff);
+                self.abun_filter.0 = Some(cutoff);
             }
         }
 
-        if filter_on && (low_abun_filter.is_some() || high_abun_filter.is_some()) {
-            filtered_hashes = filter_abundance(&filtered_hashes, low_abun_filter, high_abun_filter);
+        if filter_on && (self.abun_filter.0.is_some() || self.abun_filter.1.is_some()) {
+            filtered_hashes =
+                filter_abundance(&filtered_hashes, self.abun_filter.0, self.abun_filter.1);
         }
 
-        (filtered_hashes, low_filter_used)
+        filtered_hashes
     }
 
-    pub fn serialize_filter_params(&self) -> HashMap<String, String> {
+    pub fn to_serialized(&self) -> HashMap<String, String> {
         let mut filter_stats: HashMap<String, String> = HashMap::new();
         if self.filter_on != Some(true) {
             return filter_stats;
         }
 
-        if self.strand_filter > 0f32 {
+        if self.strand_filter > 0f64 {
             filter_stats.insert(String::from("strandFilter"), self.strand_filter.to_string());
         }
-        if self.err_filter > 0f32 {
+        if self.err_filter > 0f64 {
             filter_stats.insert(String::from("errFilter"), self.err_filter.to_string());
         }
         if let Some(v) = self.abun_filter.0 {
@@ -68,6 +65,38 @@ impl FilterParams {
         }
         filter_stats
     }
+
+    pub fn from_serialized(filters: &HashMap<String, String>) -> Self {
+        // TODO: remove unwraps and make this return a result
+        FilterParams {
+            filter_on: Some(!filters.is_empty()),
+            abun_filter: (
+                filters.get("minCopies").map(|x| x.parse().unwrap()),
+                filters.get("maxCopies").map(|x| x.parse().unwrap()),
+            ),
+            err_filter: filters
+                .get("errFilter")
+                .unwrap_or(&"0".to_string())
+                .parse()
+                .unwrap(),
+            strand_filter: filters
+                .get("strandFilter")
+                .unwrap_or(&"0".to_string())
+                .parse()
+                .unwrap(),
+        }
+    }
+}
+
+impl Default for FilterParams {
+    fn default() -> Self {
+        FilterParams {
+            filter_on: Some(false),
+            abun_filter: (None, None),
+            err_filter: 0.,
+            strand_filter: 0.,
+        }
+    }
 }
 
 /// Determines a dynamic filtering threshold for low abundance kmers. The
@@ -77,13 +106,13 @@ impl FilterParams {
 /// Useful for removing, e.g. low-abundance kmers arising from sequencing
 /// errors
 ///
-pub fn guess_filter_threshold(sketch: &[KmerCount], filter_level: f32) -> u64 {
+pub fn guess_filter_threshold(sketch: &[KmerCount], filter_level: f64) -> u64 {
     let hist_data = hist(sketch);
     let total_counts = hist_data
         .iter()
         .enumerate()
         .map(|t| (t.0 as u64 + 1) * t.1)
-        .sum::<u64>() as f32;
+        .sum::<u64>() as f64;
     let cutoff_amt = filter_level * total_counts;
 
     // calculate the coverage that N% of the weighted data is above
@@ -92,7 +121,7 @@ pub fn guess_filter_threshold(sketch: &[KmerCount], filter_level: f32) -> u64 {
     let mut cum_count: u64 = 0;
     for count in &hist_data {
         cum_count += wgt_cutoff as u64 * *count as u64;
-        if cum_count as f32 > cutoff_amt {
+        if cum_count as f64 > cutoff_amt {
             break;
         }
         wgt_cutoff += 1;
@@ -316,7 +345,7 @@ fn test_filter_abundance() {
 /// "forward" and "reverse" orientations (picked arbitrarily which is which).
 ///
 /// These tend to be sequencing adapters.
-pub fn filter_strands(sketch: &[KmerCount], ratio_cutoff: f32) -> Vec<KmerCount> {
+pub fn filter_strands(sketch: &[KmerCount], ratio_cutoff: f64) -> Vec<KmerCount> {
     let mut filtered = Vec::new();
     for kmer in sketch {
         // "special-case" anything with fewer than 16 kmers -> these are too stochastic to accurately
@@ -330,7 +359,7 @@ pub fn filter_strands(sketch: &[KmerCount], ratio_cutoff: f32) -> Vec<KmerCount>
 
         // check the forward/reverse ratio and only add if it's within bounds
         let lowest_strand_count: u64 = cmp::min(kmer.extra_count, kmer.count - kmer.extra_count);
-        if (lowest_strand_count as f64 / kmer.count as f64) >= ratio_cutoff.into() {
+        if (lowest_strand_count as f64 / kmer.count as f64) >= ratio_cutoff {
             filtered.push(kmer.clone());
         }
     }

@@ -23,6 +23,7 @@ pub trait SketchScheme {
     fn to_vec(&self) -> Vec<KmerCount>;
 }
 
+#[derive(Clone, Debug)]
 pub enum SketchParams {
     Mash {
         kmers_to_sketch: usize,
@@ -40,6 +41,18 @@ pub enum SketchParams {
     AllCounts {
         kmer_length: u8,
     },
+}
+
+impl Default for SketchParams {
+    fn default() -> Self {
+        SketchParams::Mash {
+            kmers_to_sketch: 1000,
+            final_size: 1000,
+            no_strict: false,
+            kmer_length: 21,
+            hash_seed: 0,
+        }
+    }
 }
 
 impl SketchParams {
@@ -114,4 +127,6 @@ impl SketchParams {
             SketchParams::AllCounts { kmer_length, .. } => 4usize.pow(u32::from(*kmer_length)),
         }
     }
+
+    // TODO: check compatibility with another param set?
 }

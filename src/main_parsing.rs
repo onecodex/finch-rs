@@ -96,10 +96,10 @@ pub fn parse_filter_options(matches: &ArgMatches, kmer_length: u8) -> Result<Fil
     };
 
     let mut err_filter =
-        get_float_arg::<f32>(matches, "err_filter", 100f64 / f64::from(kmer_length))?;
-    err_filter *= f32::from(kmer_length) / 100f32;
+        get_float_arg::<f64>(matches, "err_filter", 100f64 / f64::from(kmer_length))?;
+    err_filter *= f64::from(kmer_length) / 100f64;
 
-    let strand_filter = get_float_arg::<f32>(matches, "strand_filter", 1f64)?;
+    let strand_filter = get_float_arg::<f64>(matches, "strand_filter", 1f64)?;
 
     Ok(FilterParams {
         filter_on,

@@ -15,7 +15,8 @@ use memmap::MmapOptions;
 
 use finch::distance::distance;
 use finch::serialization::{
-    read_mash_file, write_mash_file, MultiSketch, Sketch, SketchDistance, FINCH_EXT, MASH_EXT,
+    read_finch_file, read_mash_file, write_finch_file, write_mash_file, FinchSketch, MultiSketch,
+    Sketch, SketchDistance, FINCH_BIN_EXT, FINCH_EXT, MASH_EXT,
 };
 use finch::statistics::{cardinality, hist};
 use finch::{sketch_files, Result};
@@ -97,15 +98,26 @@ fn run() -> Result<()> {
                 .help("The file(s) to sketch")
                 .multiple(true)
                 .required(true),
-        );
-    if cfg!(feature = "mash_format") {
-        sketch_command = sketch_command.arg(
+        )
+        .arg(
             Arg::with_name("binary_format")
                 .short("b")
-                .long("binary-format")
+                .long("finch-binary-format")
+                .help("Outputs sketch to a finch-native binary format"),
+        )
+        .arg(
+            Arg::with_name("mash_binary_format")
+                .short("B")
+                .long("mash-binary-format")
+                .conflicts_with("binary_format")
                 .help("Outputs sketch in a binary format compatible with `mash`"),
+        )
+        .arg(
+            Arg::with_name("drop_kmers")
+                .long("drop-kmers")
+                .takes_value(false)
+                .help("Strips kmers out of the resulting sketches; reduces file sizes"),
         );
-    }
     sketch_command = add_output_options(sketch_command);
     sketch_command = add_filter_options(sketch_command);
     sketch_command = add_sketch_options(sketch_command);
@@ -190,16 +202,27 @@ fn run() -> Result<()> {
 
     if let Some(matches) = matches.subcommand_matches("sketch") {
         let file_ext = if matches.is_present("binary_format") {
+            FINCH_BIN_EXT
+        } else if matches.is_present("mash_binary_format") {
             MASH_EXT
         } else {
             FINCH_EXT
         };
+        let drop_kmers = matches.is_present("drop_kmers");
         if matches.is_present("output_file") || matches.is_present("std_out") {
-            let sketches = parse_mash_files(matches)?;
+            let mut sketches = parse_mash_files(matches)?;
             let output = matches.value_of("output_file");
+
+            if drop_kmers {
+                sketches.drop_all_kmers();
+            }
+
             output_to(
                 |writer| {
                     if matches.is_present("binary_format") {
+                        let fsketches: Vec<FinchSketch> = (&sketches).into();
+                        write_finch_file(writer, &fsketches)?;
+                    } else if matches.is_present("mash_binary_format") {
                         write_mash_file(writer, &sketches)?;
                     } else {
                         serde_json::to_writer(writer, &sketches)?;
@@ -211,7 +234,7 @@ fn run() -> Result<()> {
             )?;
         } else {
             // special case for "sketching in place"
-            generate_sketch_files(matches, file_ext)?;
+            generate_sketch_files(matches, file_ext, drop_kmers)?;
         }
     } else if let Some(matches) = matches.subcommand_matches("dist") {
         let mash_mode = matches.is_present("mash_mode");
@@ -321,7 +344,7 @@ fn run() -> Result<()> {
     Ok(())
 }
 
-fn generate_sketch_files(matches: &ArgMatches, file_ext: &str) -> Result<()> {
+fn generate_sketch_files(matches: &ArgMatches, file_ext: &str, drop_kmers: bool) -> Result<()> {
     let filenames: Vec<_> = matches
         .values_of("INPUT")
         .ok_or_else(|| format_err!("Bad INPUT"))?
@@ -334,17 +357,24 @@ fn generate_sketch_files(matches: &ArgMatches, file_ext: &str) -> Result<()> {
     for filename in filenames {
         if filename.ends_with(".json")
             || filename.ends_with(FINCH_EXT)
+            || filename.ends_with(FINCH_BIN_EXT)
             || filename.ends_with(MASH_EXT)
         {
             bail!("Filename {} is not a sequence file?", filename);
         }
 
-        let multisketch = sketch_files(&[filename], &sketch_params, &filters)?;
+        let mut multisketch = sketch_files(&[filename], &sketch_params, &filters)?;
+        if drop_kmers {
+            multisketch.drop_all_kmers();
+        }
 
         let out_filename = filename.to_string() + file_ext;
         let mut out = File::create(&out_filename)
             .map_err(|_| format_err!("Could not open {}", out_filename))?;
         if matches.is_present("binary_format") {
+            let fsketches: Vec<FinchSketch> = (&multisketch).into();
+            write_finch_file(&mut out, &fsketches)?;
+        } else if matches.is_present("mash_binary_format") {
             write_mash_file(&mut out, &multisketch)?;
         } else {
             serde_json::to_writer(&mut out, &multisketch)?;
@@ -364,6 +394,7 @@ fn parse_mash_files(matches: &ArgMatches) -> Result<MultiSketch> {
     for filename in filenames {
         if filename.ends_with(".json")
             || filename.ends_with(FINCH_EXT)
+            || filename.ends_with(FINCH_BIN_EXT)
             || filename.ends_with(MASH_EXT)
         {
             sketch_filenames.push(filename);
@@ -450,6 +481,9 @@ fn open_sketch_file(filename: &str) -> Result<MultiSketch> {
     if filename.ends_with(MASH_EXT) {
         let mut buf_reader = BufReader::new(file);
         Ok(read_mash_file(&mut buf_reader)?)
+    } else if filename.ends_with(FINCH_BIN_EXT) {
+        let mut buf_reader = BufReader::new(file);
+        Ok(read_finch_file(&mut buf_reader)?)
     } else {
         let mapped = unsafe { MmapOptions::new().map(&file)? };
         Ok(serde_json::from_slice(&mapped)

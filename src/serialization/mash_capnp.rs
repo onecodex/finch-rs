@@ -86,7 +86,8 @@ pub mod min_hash {
         #[inline]
         pub fn get_reference_list_old(
             self,
-        ) -> ::capnp::Result<crate::mash_capnp::min_hash::reference_list::Reader<'a>> {
+        ) -> ::capnp::Result<crate::serialization::mash_capnp::min_hash::reference_list::Reader<'a>>
+        {
             ::capnp::traits::FromPointerReader::get_from_pointer(&self.reader.get_pointer_field(0))
         }
         pub fn has_reference_list_old(&self) -> bool {
@@ -95,7 +96,8 @@ pub mod min_hash {
         #[inline]
         pub fn get_locus_list(
             self,
-        ) -> ::capnp::Result<crate::mash_capnp::min_hash::locus_list::Reader<'a>> {
+        ) -> ::capnp::Result<crate::serialization::mash_capnp::min_hash::locus_list::Reader<'a>>
+        {
             ::capnp::traits::FromPointerReader::get_from_pointer(&self.reader.get_pointer_field(1))
         }
         pub fn has_locus_list(&self) -> bool {
@@ -129,7 +131,8 @@ pub mod min_hash {
         #[inline]
         pub fn get_reference_list(
             self,
-        ) -> ::capnp::Result<crate::mash_capnp::min_hash::reference_list::Reader<'a>> {
+        ) -> ::capnp::Result<crate::serialization::mash_capnp::min_hash::reference_list::Reader<'a>>
+        {
             ::capnp::traits::FromPointerReader::get_from_pointer(&self.reader.get_pointer_field(3))
         }
         pub fn has_reference_list(&self) -> bool {
@@ -244,13 +247,14 @@ pub mod min_hash {
         #[inline]
         pub fn get_reference_list_old(
             self,
-        ) -> ::capnp::Result<crate::mash_capnp::min_hash::reference_list::Builder<'a>> {
+        ) -> ::capnp::Result<crate::serialization::mash_capnp::min_hash::reference_list::Builder<'a>>
+        {
             ::capnp::traits::FromPointerBuilder::get_from_pointer(self.builder.get_pointer_field(0))
         }
         #[inline]
         pub fn set_reference_list_old<'b>(
             &mut self,
-            value: crate::mash_capnp::min_hash::reference_list::Reader<'b>,
+            value: crate::serialization::mash_capnp::min_hash::reference_list::Reader<'b>,
         ) -> ::capnp::Result<()> {
             ::capnp::traits::SetPointerBuilder::set_pointer_builder(
                 self.builder.get_pointer_field(0),
@@ -261,7 +265,7 @@ pub mod min_hash {
         #[inline]
         pub fn init_reference_list_old(
             self,
-        ) -> crate::mash_capnp::min_hash::reference_list::Builder<'a> {
+        ) -> crate::serialization::mash_capnp::min_hash::reference_list::Builder<'a> {
             ::capnp::traits::FromPointerBuilder::init_pointer(self.builder.get_pointer_field(0), 0)
         }
         pub fn has_reference_list_old(&self) -> bool {
@@ -270,13 +274,14 @@ pub mod min_hash {
         #[inline]
         pub fn get_locus_list(
             self,
-        ) -> ::capnp::Result<crate::mash_capnp::min_hash::locus_list::Builder<'a>> {
+        ) -> ::capnp::Result<crate::serialization::mash_capnp::min_hash::locus_list::Builder<'a>>
+        {
             ::capnp::traits::FromPointerBuilder::get_from_pointer(self.builder.get_pointer_field(1))
         }
         #[inline]
         pub fn set_locus_list<'b>(
             &mut self,
-            value: crate::mash_capnp::min_hash::locus_list::Reader<'b>,
+            value: crate::serialization::mash_capnp::min_hash::locus_list::Reader<'b>,
         ) -> ::capnp::Result<()> {
             ::capnp::traits::SetPointerBuilder::set_pointer_builder(
                 self.builder.get_pointer_field(1),
@@ -285,7 +290,9 @@ pub mod min_hash {
             )
         }
         #[inline]
-        pub fn init_locus_list(self) -> crate::mash_capnp::min_hash::locus_list::Builder<'a> {
+        pub fn init_locus_list(
+            self,
+        ) -> crate::serialization::mash_capnp::min_hash::locus_list::Builder<'a> {
             ::capnp::traits::FromPointerBuilder::init_pointer(self.builder.get_pointer_field(1), 0)
         }
         pub fn has_locus_list(&self) -> bool {
@@ -343,13 +350,14 @@ pub mod min_hash {
         #[inline]
         pub fn get_reference_list(
             self,
-        ) -> ::capnp::Result<crate::mash_capnp::min_hash::reference_list::Builder<'a>> {
+        ) -> ::capnp::Result<crate::serialization::mash_capnp::min_hash::reference_list::Builder<'a>>
+        {
             ::capnp::traits::FromPointerBuilder::get_from_pointer(self.builder.get_pointer_field(3))
         }
         #[inline]
         pub fn set_reference_list<'b>(
             &mut self,
-            value: crate::mash_capnp::min_hash::reference_list::Reader<'b>,
+            value: crate::serialization::mash_capnp::min_hash::reference_list::Reader<'b>,
         ) -> ::capnp::Result<()> {
             ::capnp::traits::SetPointerBuilder::set_pointer_builder(
                 self.builder.get_pointer_field(3),
@@ -360,7 +368,7 @@ pub mod min_hash {
         #[inline]
         pub fn init_reference_list(
             self,
-        ) -> crate::mash_capnp::min_hash::reference_list::Builder<'a> {
+        ) -> crate::serialization::mash_capnp::min_hash::reference_list::Builder<'a> {
             ::capnp::traits::FromPointerBuilder::init_pointer(self.builder.get_pointer_field(3), 0)
         }
         pub fn has_reference_list(&self) -> bool {
@@ -381,13 +389,17 @@ pub mod min_hash {
     impl Pipeline {
         pub fn get_reference_list_old(
             &self,
-        ) -> crate::mash_capnp::min_hash::reference_list::Pipeline {
+        ) -> crate::serialization::mash_capnp::min_hash::reference_list::Pipeline {
             ::capnp::capability::FromTypelessPipeline::new(self._typeless.get_pointer_field(0))
         }
-        pub fn get_locus_list(&self) -> crate::mash_capnp::min_hash::locus_list::Pipeline {
+        pub fn get_locus_list(
+            &self,
+        ) -> crate::serialization::mash_capnp::min_hash::locus_list::Pipeline {
             ::capnp::capability::FromTypelessPipeline::new(self._typeless.get_pointer_field(1))
         }
-        pub fn get_reference_list(&self) -> crate::mash_capnp::min_hash::reference_list::Pipeline {
+        pub fn get_reference_list(
+            &self,
+        ) -> crate::serialization::mash_capnp::min_hash::reference_list::Pipeline {
             ::capnp::capability::FromTypelessPipeline::new(self._typeless.get_pointer_field(3))
         }
     }
@@ -469,7 +481,7 @@ pub mod min_hash {
             ) -> ::capnp::Result<
                 ::capnp::struct_list::Reader<
                     'a,
-                    crate::mash_capnp::min_hash::reference_list::reference::Owned,
+                    crate::serialization::mash_capnp::min_hash::reference_list::reference::Owned,
                 >,
             > {
                 ::capnp::traits::FromPointerReader::get_from_pointer(
@@ -559,7 +571,7 @@ pub mod min_hash {
             ) -> ::capnp::Result<
                 ::capnp::struct_list::Builder<
                     'a,
-                    crate::mash_capnp::min_hash::reference_list::reference::Owned,
+                    crate::serialization::mash_capnp::min_hash::reference_list::reference::Owned,
                 >,
             > {
                 ::capnp::traits::FromPointerBuilder::get_from_pointer(
@@ -571,7 +583,7 @@ pub mod min_hash {
                 &mut self,
                 value: ::capnp::struct_list::Reader<
                     'a,
-                    crate::mash_capnp::min_hash::reference_list::reference::Owned,
+                    crate::serialization::mash_capnp::min_hash::reference_list::reference::Owned,
                 >,
             ) -> ::capnp::Result<()> {
                 ::capnp::traits::SetPointerBuilder::set_pointer_builder(
@@ -586,7 +598,7 @@ pub mod min_hash {
                 size: u32,
             ) -> ::capnp::struct_list::Builder<
                 'a,
-                crate::mash_capnp::min_hash::reference_list::reference::Owned,
+                crate::serialization::mash_capnp::min_hash::reference_list::reference::Owned,
             > {
                 ::capnp::traits::FromPointerBuilder::init_pointer(
                     self.builder.get_pointer_field(0),
@@ -1110,7 +1122,7 @@ pub mod min_hash {
             ) -> ::capnp::Result<
                 ::capnp::struct_list::Reader<
                     'a,
-                    crate::mash_capnp::min_hash::locus_list::locus::Owned,
+                    crate::serialization::mash_capnp::min_hash::locus_list::locus::Owned,
                 >,
             > {
                 ::capnp::traits::FromPointerReader::get_from_pointer(
@@ -1200,7 +1212,7 @@ pub mod min_hash {
             ) -> ::capnp::Result<
                 ::capnp::struct_list::Builder<
                     'a,
-                    crate::mash_capnp::min_hash::locus_list::locus::Owned,
+                    crate::serialization::mash_capnp::min_hash::locus_list::locus::Owned,
                 >,
             > {
                 ::capnp::traits::FromPointerBuilder::get_from_pointer(
@@ -1212,7 +1224,7 @@ pub mod min_hash {
                 &mut self,
                 value: ::capnp::struct_list::Reader<
                     'a,
-                    crate::mash_capnp::min_hash::locus_list::locus::Owned,
+                    crate::serialization::mash_capnp::min_hash::locus_list::locus::Owned,
                 >,
             ) -> ::capnp::Result<()> {
                 ::capnp::traits::SetPointerBuilder::set_pointer_builder(
@@ -1227,7 +1239,7 @@ pub mod min_hash {
                 size: u32,
             ) -> ::capnp::struct_list::Builder<
                 'a,
-                crate::mash_capnp::min_hash::locus_list::locus::Owned,
+                crate::serialization::mash_capnp::min_hash::locus_list::locus::Owned,
             > {
                 ::capnp::traits::FromPointerBuilder::init_pointer(
                     self.builder.get_pointer_field(0),
