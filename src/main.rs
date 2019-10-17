@@ -15,7 +15,7 @@ use memmap::MmapOptions;
 
 use finch::distance::distance;
 use finch::serialization::{
-    read_finch_file, read_mash_file, write_finch_file, write_mash_file, FinchSketch, MultiSketch,
+    read_finch_file, read_mash_file, write_finch_file, write_mash_file, JsonSketch, MultiSketch,
     Sketch, SketchDistance, FINCH_BIN_EXT, FINCH_EXT, MASH_EXT,
 };
 use finch::statistics::{cardinality, hist};
@@ -220,7 +220,7 @@ fn run() -> Result<()> {
             output_to(
                 |writer| {
                     if matches.is_present("binary_format") {
-                        let fsketches: Vec<FinchSketch> = (&sketches).into();
+                        let fsketches: Vec<Sketch> = sketches.to_sketches();
                         write_finch_file(writer, &fsketches)?;
                     } else if matches.is_present("mash_binary_format") {
                         write_mash_file(writer, &sketches)?;
@@ -372,7 +372,7 @@ fn generate_sketch_files(matches: &ArgMatches, file_ext: &str, drop_kmers: bool)
         let mut out = File::create(&out_filename)
             .map_err(|_| format_err!("Could not open {}", out_filename))?;
         if matches.is_present("binary_format") {
-            let fsketches: Vec<FinchSketch> = (&multisketch).into();
+            let fsketches: Vec<Sketch> = multisketch.to_sketches();
             write_finch_file(&mut out, &fsketches)?;
         } else if matches.is_present("mash_binary_format") {
             write_mash_file(&mut out, &multisketch)?;
@@ -446,8 +446,8 @@ fn parse_mash_files(matches: &ArgMatches) -> Result<MultiSketch> {
 }
 
 fn calc_sketch_distances(
-    query_sketches: &[&Sketch],
-    ref_sketches: &[Sketch],
+    query_sketches: &[&JsonSketch],
+    ref_sketches: &[JsonSketch],
     mash_mode: bool,
     max_distance: f64,
 ) -> Vec<SketchDistance> {

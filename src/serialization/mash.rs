@@ -6,7 +6,7 @@ use capnp::serialize as capnp_serialize;
 use failure::format_err;
 
 use crate::serialization::mash_capnp::min_hash;
-use crate::serialization::{MultiSketch, Sketch};
+use crate::serialization::{JsonSketch, MultiSketch};
 use crate::sketch_schemes::{ItemHash, KmerCount};
 use crate::Result as FinchResult;
 
@@ -72,7 +72,7 @@ pub fn write_mash_file(mut file: &mut dyn Write, sketches: &MultiSketch) -> Finc
 }
 
 pub fn read_mash_file(mut file: &mut dyn BufRead) -> FinchResult<MultiSketch> {
-    let options = *message::ReaderOptions::new().traversal_limit_in_words(64 * 1024 * 1024);
+    let options = *message::ReaderOptions::new().traversal_limit_in_words(1024 * 1024 * 1024);
     let reader = capnp_serialize::read_message(&mut file, options)?;
     let mash_data: min_hash::Reader = reader.get_root::<min_hash::Reader>()?;
 
@@ -125,7 +125,7 @@ pub fn read_mash_file(mut file: &mut dyn BufRead) -> FinchResult<MultiSketch> {
                 .collect()
         };
 
-        sketches.sketches.push(Sketch {
+        sketches.sketches.push(JsonSketch {
             name: String::from(reference.get_name()?),
             seq_length: Some(reference.get_length64()),
             num_valid_kmers: Some(reference.get_num_valid_kmers()),

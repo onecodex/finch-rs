@@ -8,11 +8,12 @@ use serde::ser::{Serialize, SerializeStruct, Serializer};
 
 use crate::filtering::FilterParams;
 pub use crate::serialization::mash::{read_mash_file, write_mash_file};
+use crate::serialization::Sketch;
 use crate::sketch_schemes::{KmerCount, SketchParams};
 use crate::Result as FinchResult;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Sketch {
+pub struct JsonSketch {
     pub name: String,
     pub seq_length: Option<u64>,
     pub num_valid_kmers: Option<u64>,
@@ -21,7 +22,7 @@ pub struct Sketch {
     pub hashes: Vec<KmerCount>,
 }
 
-impl Sketch {
+impl JsonSketch {
     pub fn new(
         name: &str,
         length: u64,
@@ -29,7 +30,7 @@ impl Sketch {
         kmercounts: Vec<KmerCount>,
         filters: &HashMap<String, String>,
     ) -> Self {
-        Sketch {
+        JsonSketch {
             name: String::from(name),
             seq_length: Some(length),
             num_valid_kmers: Some(n_kmers),
@@ -57,7 +58,7 @@ impl Sketch {
     }
 }
 
-impl Serialize for Sketch {
+impl Serialize for JsonSketch {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -84,14 +85,14 @@ impl Serialize for Sketch {
     }
 }
 
-impl<'de> Deserialize<'de> for Sketch {
+impl<'de> Deserialize<'de> for JsonSketch {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
         #[allow(non_snake_case)]
         #[derive(Deserialize)]
-        struct JSONSketch {
+        struct BaseJsonSketch {
             pub name: String,
             pub seqLength: Option<u64>,
             pub numValidKmers: Option<u64>,
@@ -102,7 +103,7 @@ impl<'de> Deserialize<'de> for Sketch {
             counts: Option<Vec<u64>>,
         }
 
-        let mut jsketch = JSONSketch::deserialize(deserializer)?;
+        let mut jsketch = BaseJsonSketch::deserialize(deserializer)?;
 
         let mut kmercount_list = Vec::with_capacity(jsketch.hashes.len());
         for i in 0..jsketch.hashes.len() {
@@ -122,7 +123,7 @@ impl<'de> Deserialize<'de> for Sketch {
                 extra_count: count / 2,
             });
         }
-        Ok(Sketch {
+        Ok(JsonSketch {
             name: jsketch.name,
             seq_length: jsketch.seqLength,
             num_valid_kmers: jsketch.numValidKmers,
@@ -149,7 +150,7 @@ pub struct MultiSketch {
     #[serde(rename = "hashSeed")]
     pub hash_seed: u64,
     pub scale: Option<f64>,
-    pub sketches: Vec<Sketch>,
+    pub sketches: Vec<JsonSketch>,
 }
 
 impl MultiSketch {
@@ -233,6 +234,45 @@ impl MultiSketch {
                 hash.kmer = vec![];
             }
         }
+    }
+
+    pub fn from_sketches(sketches: &[Sketch]) -> Self {
+        let json_sketches: Vec<JsonSketch> = sketches.iter().map(|x| (*x).clone().into()).collect();
+        let sketch_params = &sketches[0].sketch_params;
+        let (hash_type, hash_bits, hash_seed, scale) = sketch_params.hash_info();
+        MultiSketch {
+            alphabet: "ACGT".to_string(),
+            preserve_case: false,
+            canonical: true,
+
+            sketch_size: sketch_params.expected_size() as u32,
+            kmer: sketch_params.k(),
+            hash_type: hash_type.to_string(),
+            hash_bits,
+            hash_seed,
+            scale,
+            sketches: json_sketches,
+        }
+    }
+
+    pub fn to_sketches(&self) -> Vec<Sketch> {
+        let empty_hashmap = HashMap::new();
+        let mut sketches = Vec::with_capacity(self.sketches.len());
+        let sketch_params = self.get_params().unwrap();
+        for sketch in &self.sketches {
+            let filters = sketch.filters.as_ref().unwrap_or(&empty_hashmap);
+            let filter_params = FilterParams::from_serialized(filters);
+            sketches.push(Sketch {
+                name: sketch.name.clone(),
+                seq_length: sketch.seq_length.unwrap_or(0),
+                num_valid_kmers: sketch.num_valid_kmers.unwrap_or(0),
+                comment: sketch.comment.clone().unwrap_or_else(|| "".to_string()),
+                hashes: sketch.hashes.clone(),
+                filter_params,
+                sketch_params: sketch_params.clone(),
+            });
+        }
+        sketches
     }
 }
 

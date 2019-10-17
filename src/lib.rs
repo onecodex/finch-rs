@@ -49,19 +49,7 @@ pub fn sketch_files(
             Ok(sketch_stream(reader, filename, sketch_params, &filters)?)
         })
         .collect();
-    let (hash_type, hash_bits, hash_seed, scale) = sketch_params.hash_info();
-    Ok(MultiSketch {
-        kmer: sketch_params.k(),
-        alphabet: String::from("ACGT"),
-        preserve_case: false,
-        canonical: true,
-        sketch_size: sketch_params.expected_size() as u32,
-        hash_type: String::from(hash_type),
-        hash_bits,
-        hash_seed,
-        scale,
-        sketches: sketches?,
-    })
+    Ok(MultiSketch::from_sketches(&sketches?))
 }
 
 pub fn sketch_stream<'a>(
@@ -70,14 +58,14 @@ pub fn sketch_stream<'a>(
     sketch_params: &SketchParams,
     filters: &FilterParams,
 ) -> Result<Sketch> {
-    let mut filters = filters.clone();
+    let mut filter_params = filters.clone();
     let mut sketcher = sketch_params.create_sketcher();
     parse_sequence_reader(
         reader,
         |seq_type| {
             // disable filtering for FASTA files unless it was explicitly specified
-            if filters.filter_on.is_none() {
-                filters.filter_on = match seq_type {
+            if filter_params.filter_on.is_none() {
+                filter_params.filter_on = match seq_type {
                     "FASTA" => Some(false),
                     "FASTQ" => Some(true),
                     _ => panic!("Unknown sequence type"),
@@ -90,20 +78,21 @@ pub fn sketch_stream<'a>(
     )
     .map_err(|e| format_err!("{}", e.to_string()))?;
 
-    let (seq_len, n_kmers) = sketcher.total_bases_and_kmers();
+    let (seq_length, num_valid_kmers) = sketcher.total_bases_and_kmers();
     let hashes = sketcher.to_vec();
 
     // do filtering
-    let mut filtered_hashes = filters.filter_sketch(&hashes);
-    let filter_stats = filters.to_serialized();
-
+    let mut filtered_hashes = filter_params.filter_sketch(&hashes);
     sketch_params.process_post_filter(&mut filtered_hashes, name)?;
+    // let filter_stats = filters.to_serialized();
 
-    Ok(Sketch::new(
-        name,
-        seq_len,
-        n_kmers,
-        filtered_hashes,
-        &filter_stats,
-    ))
+    Ok(Sketch {
+        name: name.to_string(),
+        seq_length,
+        num_valid_kmers,
+        comment: "".to_string(),
+        hashes: filtered_hashes,
+        filter_params,
+        sketch_params: sketch_params.clone(),
+    })
 }
