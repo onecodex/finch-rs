@@ -115,7 +115,7 @@ impl Multisketch {
             serde_json::from_reader(buf_reader)
                 .map_err(|e| PyErr::new::<FinchError, _>(format!("{}", e)))?
         };
-        Ok(Multisketch { ms: ms })
+        Ok(Multisketch { ms })
     }
 
     // TODO: save method?
@@ -177,9 +177,12 @@ impl Multisketch {
             .drain(..1)
             .next()
             .ok_or_else(|| PyErr::new::<FinchError, _>("No sketches to squash"))?;
-        let sketch_size = s.sketch_params.expected_size();
+        let mut sketch_size = Some(s.sketch_params.expected_size());
+        if sketch_size == Some(0) {
+            sketch_size = None;
+        }
         for sketch in sketches {
-            merge_sketches(&mut s, &sketch, Some(sketch_size))
+            merge_sketches(&mut s, &sketch, sketch_size)
                 .map_err(|e| PyErr::new::<FinchError, _>(format!("{}", e)))?;
         }
         Ok(Sketch { s })
@@ -265,7 +268,7 @@ impl Sketch {
     }
 
     #[getter]
-    fn get_hashes(&self) -> PyResult<Vec<(u64, Py<PyBytes>, u64, u64)>> {
+    fn get_hashes(&self) -> PyResult<Vec<(u64, Py<PyBytes>, u32, u32)>> {
         let gil = Python::acquire_gil();
         let py = gil.python();
         Ok(self
@@ -289,15 +292,7 @@ impl Sketch {
             } => {
                 let is_no_strict = if no_strict { "true" } else { "false" };
                 format!(
-                    "{{
-                    \"sketch_type\": \"mash\",
-                    \"kmers_to_sketch\": {},
-                    \"final_size\": {},
-                    \"no_strict\": {},
-                    \"kmer_length\": {},
-                    \"hash_seed\": {},
-
-                }}",
+                    "{{\"sketch_type\": \"mash\", \"kmers_to_sketch\": {}, \"final_size\": {}, \"no_strict\": {}, \"kmer_length\": {}, \"hash_seed\": {}}}",
                     kmers_to_sketch, final_size, is_no_strict, kmer_length, hash_seed,
                 )
             }
@@ -307,21 +302,11 @@ impl Sketch {
                 scale,
                 hash_seed,
             } => format!(
-                "{{
-                    \"sketch_type\": \"scaled\",
-                    \"kmers_to_sketch\": {},
-                    \"kmer_length\": {},
-                    \"scale\": {},
-                    \"hash_seed\": {},
-
-                }}",
+                "{{\"sketch_type\": \"scaled\", \"kmers_to_sketch\": {}, \"kmer_length\": {}, \"scale\": {}, \"hash_seed\": {}}}",
                 kmers_to_sketch, kmer_length, scale, hash_seed,
             ),
             SketchParams::AllCounts { kmer_length } => format!(
-                "{{
-                    \"sketch_type\": \"none\",
-                    \"kmer_length\": {},
-                }}",
+                "{{\"sketch_type\": \"none\", \"kmer_length\": {}}}",
                 kmer_length,
             ),
         })

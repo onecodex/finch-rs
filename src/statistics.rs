@@ -26,7 +26,7 @@ pub fn hist(sketch: &[KmerCount]) -> Vec<u64> {
     let mut counts = vec![0u64; 65536];
     let mut max_count: u64 = 0;
     for kmer in sketch {
-        max_count = cmp::max(max_count, kmer.count);
+        max_count = cmp::max(max_count, u64::from(kmer.count));
         counts[kmer.count as usize - 1] += 1;
     }
     counts.truncate(max_count as usize);

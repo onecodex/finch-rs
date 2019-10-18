@@ -119,8 +119,8 @@ pub fn read_mash_file(mut file: &mut dyn BufRead) -> FinchResult<MultiSketch> {
                 .map(|(h, c)| KmerCount {
                     hash: h as ItemHash,
                     kmer: Vec::new(),
-                    count: u64::from(c),
-                    extra_count: 0,
+                    count: c,
+                    extra_count: c / 2,
                 })
                 .collect()
         };

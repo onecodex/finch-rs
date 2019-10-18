@@ -9,8 +9,8 @@ enum SketchMethod {
 
 struct FilterParams {
   filtered @0 :Bool;
-  lowAbunFilter @1 :UInt64;
-  highAbunFilter @2 :UInt64;
+  lowAbunFilter @1 :UInt32;
+  highAbunFilter @2 :UInt32;
   errFilter @3 :Float64;
   strandFilter @4 :Float64;
 }

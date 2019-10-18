@@ -10,7 +10,7 @@ use crate::sketch_schemes::{ItemHash, KmerCount, SketchScheme};
 #[derive(Clone, Debug)]
 pub struct ScaledSketcher {
     hashes: BinaryHeap<HashedItem<Vec<u8>>>,
-    counts: HashMap<ItemHash, (u64, u64), BuildHasherDefault<NoHashHasher>>,
+    counts: HashMap<ItemHash, (u32, u32), BuildHasherDefault<NoHashHasher>>,
     kmer_length: u8,
     total_kmers: u64,
     total_bases: u64,
@@ -42,14 +42,13 @@ impl ScaledSketcher {
         if new_hash <= self.max_hash || (self.hashes.len() <= self.size && self.size != 0) {
             if self.counts.contains_key(&new_hash) {
                 let count = self.counts.entry(new_hash).or_insert((0, 0));
-                (*count).0 += 1;
-                (*count).1 += u64::from(extra_count);
+                (*count) = ((*count).0.saturating_add(1), (*count).1.saturating_add(u32::from(extra_count)));
             } else {
                 self.hashes.push(HashedItem {
                     hash: new_hash,
                     item: kmer.to_owned(),
                 });
-                self.counts.insert(new_hash, (1, u64::from(extra_count)));
+                self.counts.insert(new_hash, (1, u32::from(extra_count)));
                 if self.hashes.len() > self.size
                     && (*self.hashes.peek().unwrap()).hash > self.max_hash
                 {

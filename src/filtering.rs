@@ -8,7 +8,7 @@ use crate::statistics::hist;
 #[derive(Clone, Debug)]
 pub struct FilterParams {
     pub filter_on: Option<bool>,
-    pub abun_filter: (Option<u64>, Option<u64>),
+    pub abun_filter: (Option<u32>, Option<u32>),
     pub err_filter: f64,
     pub strand_filter: f64,
 }
@@ -106,7 +106,7 @@ impl Default for FilterParams {
 /// Useful for removing, e.g. low-abundance kmers arising from sequencing
 /// errors
 ///
-pub fn guess_filter_threshold(sketch: &[KmerCount], filter_level: f64) -> u64 {
+pub fn guess_filter_threshold(sketch: &[KmerCount], filter_level: f64) -> u32 {
     let hist_data = hist(sketch);
     let total_counts = hist_data
         .iter()
@@ -146,7 +146,7 @@ pub fn guess_filter_threshold(sketch: &[KmerCount], filter_level: f64) -> u64 {
         sum += hist_data[j];
     }
 
-    lowest_idx as u64 + 1
+    lowest_idx as u32 + 1
 }
 
 #[test]
@@ -269,12 +269,12 @@ fn test_guess_filter_threshold() {
 
 pub fn filter_abundance(
     sketch: &[KmerCount],
-    low: Option<u64>,
-    high: Option<u64>,
+    low: Option<u32>,
+    high: Option<u32>,
 ) -> Vec<KmerCount> {
     let mut filtered = Vec::new();
-    let lo_threshold = low.unwrap_or(0u64);
-    let hi_threshold = high.unwrap_or(u64::max_value());
+    let lo_threshold = low.unwrap_or(0u32);
+    let hi_threshold = high.unwrap_or(u32::max_value());
     for kmer in sketch {
         if lo_threshold <= kmer.count && kmer.count <= hi_threshold {
             filtered.push(kmer.clone());
@@ -358,7 +358,7 @@ pub fn filter_strands(sketch: &[KmerCount], ratio_cutoff: f64) -> Vec<KmerCount>
         }
 
         // check the forward/reverse ratio and only add if it's within bounds
-        let lowest_strand_count: u64 = cmp::min(kmer.extra_count, kmer.count - kmer.extra_count);
+        let lowest_strand_count = cmp::min(kmer.extra_count, kmer.count - kmer.extra_count);
         if (lowest_strand_count as f64 / kmer.count as f64) >= ratio_cutoff {
             filtered.push(kmer.clone());
         }

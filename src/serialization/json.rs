@@ -100,7 +100,7 @@ impl<'de> Deserialize<'de> for JsonSketch {
             pub filters: Option<HashMap<String, String>>,
             hashes: Vec<QuotedU64>,
             kmers: Option<Vec<String>>,
-            counts: Option<Vec<u64>>,
+            counts: Option<Vec<u32>>,
         }
 
         let mut jsketch = BaseJsonSketch::deserialize(deserializer)?;

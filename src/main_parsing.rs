@@ -84,13 +84,13 @@ pub fn parse_filter_options(matches: &ArgMatches, kmer_length: u8) -> Result<Fil
     };
 
     let min_abun_filter = if matches.occurrences_of("min_abun_filter") > 0 {
-        Some(get_int_arg::<u64>(matches, "min_abun_filter")?)
+        Some(get_int_arg::<u32>(matches, "min_abun_filter")?)
     } else {
         None
     };
 
     let max_abun_filter = if matches.occurrences_of("max_abun_filter") > 0 {
-        Some(get_int_arg::<u64>(matches, "max_abun_filter")?)
+        Some(get_int_arg::<u32>(matches, "max_abun_filter")?)
     } else {
         None
     };

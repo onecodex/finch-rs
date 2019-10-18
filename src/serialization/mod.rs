@@ -133,14 +133,6 @@ fn get_sketch_params(cap_sketch_params: sketch_params::Reader) -> Result<SketchP
     })
 }
 
-fn saturated_u64_to_u32(v: u64) -> u32 {
-    if v > u64::from(std::u32::MAX) {
-        std::u32::MAX
-    } else {
-        v as u32
-    }
-}
-
 pub fn write_finch_file(mut file: &mut dyn Write, sketches: &[Sketch]) -> Result<()> {
     let mut message = message::Builder::new_default();
     let finch_file: multisketch::Builder = message.init_root::<multisketch::Builder>();
@@ -162,8 +154,8 @@ pub fn write_finch_file(mut file: &mut dyn Write, sketches: &[Sketch]) -> Result
             let mut cap_hash = hashes.reborrow().get(j as u32);
             cap_hash.set_hash(hash.hash);
             cap_hash.set_kmer(&hash.kmer);
-            cap_hash.set_count(saturated_u64_to_u32(hash.count));
-            cap_hash.set_extra_count(saturated_u64_to_u32(hash.extra_count));
+            cap_hash.set_count(hash.count);
+            cap_hash.set_extra_count(hash.extra_count);
         }
 
         let mut cap_filter_params = cap_sketch.reborrow().init_filter_params();
@@ -174,7 +166,7 @@ pub fn write_finch_file(mut file: &mut dyn Write, sketches: &[Sketch]) -> Result
                 .filter_params
                 .abun_filter
                 .1
-                .unwrap_or(::std::u64::MAX),
+                .unwrap_or(::std::u32::MAX),
         );
         cap_filter_params.set_err_filter(sketch.filter_params.err_filter);
         cap_filter_params.set_strand_filter(sketch.filter_params.strand_filter);
@@ -202,8 +194,8 @@ pub fn read_finch_file(mut file: &mut dyn BufRead) -> Result<MultiSketch> {
             hashes.push(KmerCount {
                 hash: cap_hash.get_hash(),
                 kmer: cap_hash.get_kmer()?.to_vec(),
-                count: u64::from(cap_hash.get_count()),
-                extra_count: u64::from(cap_hash.get_extra_count()),
+                count: cap_hash.get_count(),
+                extra_count: cap_hash.get_extra_count(),
             });
         }
 
@@ -216,7 +208,7 @@ pub fn read_finch_file(mut file: &mut dyn BufRead) -> Result<MultiSketch> {
             i => Some(i),
         };
         let high_abun_filter = match cap_filter_params.get_high_abun_filter() {
-            ::std::u64::MAX => None,
+            ::std::u32::MAX => None,
             i => Some(i),
         };
         let filter_params = FilterParams {

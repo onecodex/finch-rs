@@ -325,7 +325,7 @@ fn run() -> Result<()> {
                     .kmer
                     .iter()
                     .map(|b| match *b {
-                        b'G' | b'g' | b'C' | b'c' => kmer.count,
+                        b'G' | b'g' | b'C' | b'c' => u64::from(kmer.count),
                         _ => 0,
                     })
                     .sum::<u64>();

@@ -5,7 +5,7 @@ use crate::sketch_schemes::{KmerCount, SketchScheme};
 
 #[derive(Clone)]
 pub struct AllCountsSketcher {
-    counts: Vec<u64>,
+    counts: Vec<u32>,
     total_bases: u64,
     k: u8,
 }
@@ -24,12 +24,12 @@ impl AllCountsSketcher {
 impl SketchScheme for AllCountsSketcher {
     fn process(&mut self, seq: SequenceRecord) {
         for (_, kmer, _) in seq.normalize(false).bit_kmers(self.k, false) {
-            self.counts[kmer.0 as usize] += 1;
+            self.counts[kmer.0 as usize] = self.counts[kmer.0 as usize].saturating_add(1);
         }
     }
 
     fn total_bases_and_kmers(&self) -> (u64, u64) {
-        (self.total_bases, self.counts.iter().sum())
+        (self.total_bases, self.counts.iter().map(|x| u64::from(*x)).sum())
     }
 
     fn to_vec(&self) -> Vec<KmerCount> {

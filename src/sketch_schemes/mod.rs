@@ -13,8 +13,8 @@ pub use hashing::ItemHash;
 pub struct KmerCount {
     pub hash: ItemHash,
     pub kmer: Vec<u8>,
-    pub count: u64,
-    pub extra_count: u64,
+    pub count: u32,
+    pub extra_count: u32,
 }
 
 pub trait SketchScheme {
