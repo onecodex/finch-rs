@@ -5,16 +5,17 @@ extern crate capnp;
 extern crate serde_derive;
 
 use std::fs::File;
-use std::io::{stdin, Read};
+use std::io::{BufReader, stdin, Read};
 use std::path::Path;
 use std::result::Result as StdResult;
 
 use failure::{format_err, Error};
+use memmap::MmapOptions;
 use needletail::formats::parse_sequence_reader;
 use rayon::prelude::*;
 
 use crate::filtering::FilterParams;
-use crate::serialization::{MultiSketch, Sketch};
+use crate::serialization::{read_finch_file, read_mash_file, MultiSketch, Sketch, FINCH_BIN_EXT, FINCH_EXT, MASH_EXT};
 use crate::sketch_schemes::SketchParams;
 
 pub mod distance;
@@ -34,7 +35,7 @@ pub fn sketch_files(
     filenames: &[&str],
     sketch_params: &SketchParams,
     filters: &FilterParams,
-) -> Result<MultiSketch> {
+) -> Result<Vec<Sketch>> {
     let sketches: Result<Vec<Sketch>> = filenames
         .par_iter()
         .map(|filename| {
@@ -49,7 +50,7 @@ pub fn sketch_files(
             Ok(sketch_stream(reader, filename, sketch_params, &filters)?)
         })
         .collect();
-    Ok(MultiSketch::from_sketches(&sketches?))
+    sketches
 }
 
 pub fn sketch_stream<'a>(
@@ -82,7 +83,7 @@ pub fn sketch_stream<'a>(
     let hashes = sketcher.to_vec();
 
     // do filtering
-    let mut filtered_hashes = filter_params.filter_sketch(&hashes);
+    let mut filtered_hashes = filter_params.filter_counts(&hashes);
     sketch_params.process_post_filter(&mut filtered_hashes, name)?;
     // let filter_stats = filters.to_serialized();
 
@@ -95,4 +96,25 @@ pub fn sketch_stream<'a>(
         filter_params,
         sketch_params: sketch_params.clone(),
     })
+}
+
+
+pub fn open_sketch_file(filename: &str) -> Result<Vec<Sketch>> {
+    let file = File::open(filename).map_err(|_| format_err!("Error opening {}", &filename))?;
+    if filename.ends_with(MASH_EXT) {
+        let mut buf_reader = BufReader::new(file);
+        read_mash_file(&mut buf_reader)
+    } else if filename.ends_with(FINCH_BIN_EXT) {
+        // FIXME: we need to check all the sketches are concordant in here?
+        // or should we do that on write?
+        let mut buf_reader = BufReader::new(file);
+        read_finch_file(&mut buf_reader)
+    } else if filename.ends_with(FINCH_EXT) || filename.ends_with(".json"){
+        let mapped = unsafe { MmapOptions::new().map(&file)? };
+        let multisketch: MultiSketch = serde_json::from_slice(&mapped)
+            .map_err(|_| format_err!("Error parsing {}", &filename))?;
+        multisketch.to_sketches()
+    } else {
+        Err(format_err!("File suffix is not *.bsk, *.msh, or *.sk"))
+    }
 }

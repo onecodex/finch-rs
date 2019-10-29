@@ -47,15 +47,6 @@ impl JsonSketch {
     pub fn is_empty(&self) -> bool {
         self.hashes.is_empty()
     }
-
-    pub fn apply_filtering(&mut self, filters: &FilterParams) -> bool {
-        let mut filters = filters.clone();
-        let filtered_hashes = filters.filter_sketch(&self.hashes);
-        let filter_stats = filters.to_serialized();
-        self.hashes = filtered_hashes;
-        self.filters = Some(filter_stats);
-        true
-    }
 }
 
 impl Serialize for JsonSketch {
@@ -154,42 +145,6 @@ pub struct MultiSketch {
 }
 
 impl MultiSketch {
-    pub fn extend(&mut self, other: &MultiSketch, name: &str) -> FinchResult<()> {
-        // kmer, hashType, hashSeed, and hashBits must be same
-        if self.kmer != other.kmer {
-            bail!(
-                "{} has a different kmer length ({}) from others ({})",
-                name,
-                self.kmer,
-                other.kmer
-            );
-        } else if self.hash_type != other.hash_type {
-            bail!(
-                "{} used a different hash ({}) from others ({})",
-                name,
-                self.hash_type,
-                other.hash_type
-            );
-        } else if self.hash_seed != other.hash_seed {
-            bail!(
-                "{} had a different hash seed ({}) from others ({})",
-                name,
-                self.hash_seed,
-                other.hash_seed
-            );
-        } else if self.hash_bits != other.hash_bits {
-            bail!(
-                "{} used a different length hash ({}) from others ({})",
-                name,
-                self.hash_bits,
-                other.hash_bits
-            );
-        }
-
-        self.sketches.extend(other.sketches.clone());
-        Ok(())
-    }
-
     pub fn get_params(&self) -> FinchResult<SketchParams> {
         Ok(match (&*self.hash_type, self.scale) {
             ("MurmurHash3_x64_128", None) => {
@@ -228,19 +183,11 @@ impl MultiSketch {
         })
     }
 
-    pub fn drop_all_kmers(&mut self) {
-        for sketch in &mut self.sketches {
-            for hash in &mut sketch.hashes {
-                hash.kmer = vec![];
-            }
-        }
-    }
-
-    pub fn from_sketches(sketches: &[Sketch]) -> Self {
+    pub fn from_sketches(sketches: &[Sketch]) -> FinchResult<Self> {
         let json_sketches: Vec<JsonSketch> = sketches.iter().map(|x| (*x).clone().into()).collect();
-        let sketch_params = &sketches[0].sketch_params;
+        let sketch_params = SketchParams::from_sketches(&sketches)?;
         let (hash_type, hash_bits, hash_seed, scale) = sketch_params.hash_info();
-        MultiSketch {
+        Ok(MultiSketch {
             alphabet: "ACGT".to_string(),
             preserve_case: false,
             canonical: true,
@@ -252,16 +199,16 @@ impl MultiSketch {
             hash_seed,
             scale,
             sketches: json_sketches,
-        }
+        })
     }
 
-    pub fn to_sketches(&self) -> Vec<Sketch> {
+    pub fn to_sketches(&self) -> FinchResult<Vec<Sketch>> {
         let empty_hashmap = HashMap::new();
         let mut sketches = Vec::with_capacity(self.sketches.len());
-        let sketch_params = self.get_params().unwrap();
+        let sketch_params = self.get_params()?;
         for sketch in &self.sketches {
             let filters = sketch.filters.as_ref().unwrap_or(&empty_hashmap);
-            let filter_params = FilterParams::from_serialized(filters);
+            let filter_params = FilterParams::from_serialized(filters)?;
             sketches.push(Sketch {
                 name: sketch.name.clone(),
                 seq_length: sketch.seq_length.unwrap_or(0),
@@ -272,7 +219,7 @@ impl MultiSketch {
                 sketch_params: sketch_params.clone(),
             });
         }
-        sketches
+        Ok(sketches)
     }
 }
 

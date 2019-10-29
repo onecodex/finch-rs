@@ -1,23 +1,25 @@
+use std::collections::VecDeque;
+use std::fmt::Display;
 use std::fs::File;
-use std::io::BufReader;
 
 use numpy::{PyArray, PyArray1, PyArray2};
 use pyo3::class::*;
+use pyo3::exceptions::{IndexError, KeyError};
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyTuple, PyType};
-use pyo3::{py_exception, wrap_function};
+use pyo3::types::{PyAny, PyBytes, PyList, PyTuple, PyType};
+use pyo3::{create_exception, wrap_pyfunction};
 
-use crate::distance::{common_counts, distance, distance_scaled, minmer_matrix};
+use crate::distance::{best_distance, distance, distance_scaled, minmer_matrix};
 use crate::filtering::FilterParams;
-use crate::serialization::{
-    read_finch_file, read_mash_file, write_finch_file, MultiSketch as MSType, Sketch as SType,
-    FINCH_BIN_EXT, MASH_EXT,
-};
-use crate::sketch_files as rs_sketch_files;
+use crate::serialization::{write_finch_file, Sketch as SType};
 use crate::sketch_schemes::{KmerCount, SketchParams};
-use crate::Result as FinchResult;
+use crate::{Result as FinchResult, sketch_files as rs_sketch_files, open_sketch_file};
 
-py_exception!(finch, FinchError, pyo3::exceptions::Exception);
+create_exception!(finch, FinchError, pyo3::exceptions::Exception);
+
+fn to_pyerr(e: impl Display) -> PyErr {
+    PyErr::new::<FinchError, _>(format!("{}", e))
+}
 
 fn merge_sketches(sketch: &mut SType, other: &SType, size: Option<usize>) -> FinchResult<()> {
     // update my parameters from the remote's
@@ -90,109 +92,103 @@ fn merge_sketches(sketch: &mut SType, other: &SType, size: Option<usize>) -> Fin
 /// A Multisketch is a collection of Sketchs with information about their generation parameters
 /// (to make sure they're consistant for distance calculation).
 pub struct Multisketch {
-    pub ms: MSType,
+    pub sketches: Vec<SType>,
 }
 
 #[pymethods]
 impl Multisketch {
     #[classmethod]
-    /// open_file(filename)
+    /// open(filename: str)
     ///
-    /// Takes a file path to either a `.sk` or a `.mash` file and returns the Multisketch
+    /// Takes a file path to a `.sk`, `.bsk` or a `.mash` file and returns the Multisketch
     /// represented by that file.
-    fn open_file(_cls: &PyType, filename: &str) -> PyResult<Multisketch> {
-        // this is the same as in main.rs and we should probably refactor these together
-        let file = File::open(filename)?;
-        let mut buf_reader = BufReader::new(file);
-        let ms: MSType = if filename.ends_with(MASH_EXT) {
-            read_mash_file(&mut buf_reader)
-                .map_err(|e| PyErr::new::<FinchError, _>(format!("{}", e)))?
-        } else if filename.ends_with(FINCH_BIN_EXT) {
-            read_finch_file(&mut buf_reader)
-                .map_err(|e| PyErr::new::<FinchError, _>(format!("{}", e)))?
-        } else {
-            // TODO: check for a finch extension?
-            serde_json::from_reader(buf_reader)
-                .map_err(|e| PyErr::new::<FinchError, _>(format!("{}", e)))?
-        };
-        Ok(Multisketch { ms })
+    pub fn open(_cls: &PyType, filename: &str) -> PyResult<Multisketch> {
+        Ok(Multisketch { sketches: open_sketch_file(filename).map_err(to_pyerr)? })
     }
 
-    // TODO: save method?
-
-    #[getter]
-    fn get_kmer(&self) -> PyResult<u8> {
-        Ok(self.ms.kmer)
+    #[classmethod]
+    /// from_sketches(sketches: List[Sketch])
+    pub fn from_sketches(_cls: &PyType, sketches: &PyList) -> PyResult<Multisketch> {
+        let sketches: Vec<&Sketch> = sketches.extract()?;
+        let sketches = sketches.iter().map(|s| s.s.clone()).collect();
+        Ok(Multisketch { sketches })
     }
 
-    #[getter]
-    fn get_alphabet(&self) -> PyResult<String> {
-        Ok(self.ms.alphabet.clone())
+    /// save(self, filename: str)
+    ///
+    /// Saves the collection of sketches to the filename provided
+    pub fn save(&self, filename: &str) -> PyResult<()> {
+        // TODO: support other file formats
+        let mut out = File::create(&filename)
+            .map_err(|_| PyErr::new::<FinchError, _>(format!("Could not create {}", filename)))?;
+        write_finch_file(&mut out, &self.sketches).map_err(to_pyerr)?;
+        Ok(())
     }
 
-    #[getter]
-    fn get_preserve_case(&self) -> PyResult<bool> {
-        Ok(self.ms.preserve_case)
+    /// best_match(sketch: Sketch)
+    pub fn best_match(&self, query: &Sketch) -> PyResult<(usize, Sketch)> {
+        // TODO: this should return an error if self.sketches is empty?
+        let mut min_sketch: usize = 0;
+        // since this is a query against a set of references we're using
+        // 1 - containment as the comparison metric
+        let mut min_dist: f64 = 1.;
+        for (ix, sketch) in self.sketches.iter().enumerate() {
+            // TODO: use best_distance here and elsewhere?
+            let dist = distance_scaled(&sketch.hashes, &query.s.hashes, &sketch.name, &query.s.name).map_err(to_pyerr)?;
+            if (1. - dist.containment) < min_dist {
+                min_dist = 1. - dist.containment;
+                min_sketch = ix;
+            }
+        }
+        Ok((min_sketch, self.sketches[min_sketch].clone().into()))
     }
 
-    #[getter]
-    fn get_canonical(&self) -> PyResult<bool> {
-        Ok(self.ms.canonical)
-    }
-
-    #[getter]
-    fn get_sketch_size(&self) -> PyResult<u32> {
-        Ok(self.ms.sketch_size)
-    }
-
-    #[getter]
-    fn get_hash_type(&self) -> PyResult<String> {
-        Ok(self.ms.hash_type.clone())
-    }
-
-    #[getter]
-    fn get_hash_bits(&self) -> PyResult<u16> {
-        Ok(self.ms.hash_bits)
-    }
-
-    #[getter]
-    fn get_hash_seed(&self) -> PyResult<u64> {
-        Ok(self.ms.hash_seed)
-    }
-
-    #[getter]
-    fn get_sketches(&self) -> PyResult<Vec<Sketch>> {
-        // TODO: we should be doing this without a clone probably?
-        // (i.e. returning references to things in the multisketch)
-        let sketches: Vec<SType> = self.ms.to_sketches();
-        let fsketches: FinchResult<Vec<Sketch>> =
-            sketches.into_iter().map(|s| Ok(Sketch { s })).collect();
-
-        fsketches.map_err(|e| PyErr::new::<FinchError, _>(format!("{}", e)))
-    }
-
-    pub fn squashed(&self) -> PyResult<Sketch> {
-        let mut sketches: Vec<SType> = self.ms.to_sketches();
-        let mut s = sketches
-            .drain(..1)
+    // TODO: this is a little niche/untested; do we want this?
+    pub fn squash(&self) -> PyResult<Sketch> {
+        let mut sketch_iter = self.sketches.iter();
+        let mut s = sketch_iter
             .next()
-            .ok_or_else(|| PyErr::new::<FinchError, _>("No sketches to squash"))?;
+            .ok_or_else(|| PyErr::new::<FinchError, _>("No sketches to squash"))?
+            .clone();
         let mut sketch_size = Some(s.sketch_params.expected_size());
         if sketch_size == Some(0) {
             sketch_size = None;
         }
-        for sketch in sketches {
-            merge_sketches(&mut s, &sketch, sketch_size)
-                .map_err(|e| PyErr::new::<FinchError, _>(format!("{}", e)))?;
+        for sketch in sketch_iter {
+            merge_sketches(&mut s, &sketch, sketch_size).map_err(to_pyerr)?;
         }
-        Ok(Sketch { s })
+        Ok(s.into())
+    }
+}
+
+#[pyproto]
+impl PyIterProtocol for Multisketch {
+    fn __iter__(slf: PyRefMut<Self>) -> PyResult<SketchIter> {
+        let sketches = slf
+            .sketches
+            .iter()
+            .map(|s| s.clone().into())
+            .collect();
+        Ok(SketchIter { sketches })
+    }
+}
+
+#[pyclass]
+pub struct SketchIter {
+    sketches: VecDeque<Sketch>,
+}
+
+#[pyproto]
+impl PyIterProtocol for SketchIter {
+    fn __next__(mut slf: PyRefMut<Self>) -> PyResult<Option<Sketch>> {
+        Ok(slf.sketches.pop_front())
     }
 }
 
 #[pyproto]
 impl PyObjectProtocol for Multisketch {
     fn __repr__(&self) -> PyResult<String> {
-        let n_sketches = self.ms.sketches.len();
+        let n_sketches = self.sketches.len();
         let sketch_plural = if n_sketches == 1 {
             "sketch"
         } else {
@@ -202,10 +198,64 @@ impl PyObjectProtocol for Multisketch {
     }
 }
 
+#[inline]
+fn _get_sketch_index(sketches: &[SType], key: &PyAny) -> PyResult<usize> {
+    if let Ok(int_key) = key.extract::<isize>() {
+        let l = sketches.len() as isize;
+        if -l <= int_key && int_key < 0 {
+            Ok((l - int_key) as usize)
+        } else if 0 <= int_key && int_key < l {
+            Ok(int_key as usize)
+        } else {
+            Err(PyErr::new::<IndexError, _>("index out of range"))
+        }
+    } else if let Ok(str_key) = key.extract::<&str>() {
+        // TODO: we should maybe build an internal HashMap cache for this?
+        // (note we have to handle non-unique keys then unless we want to
+        // just standardize on returning the first matching item always)
+        let remove_idx = sketches.iter().position(|s| s.name == str_key);
+        if let Some(idx) = remove_idx {
+            Ok(idx)
+        } else {
+            Err(PyErr::new::<KeyError, _>(str_key.to_string()))
+        }
+    } else {
+        Err(PyErr::new::<FinchError, _>("key is not a string or integer"))
+    }
+}
+
 #[pyproto]
 impl PyMappingProtocol for Multisketch {
     fn __len__(&self) -> PyResult<usize> {
-        Ok(self.ms.sketches.len())
+        Ok(self.sketches.len())
+    }
+
+    fn __getitem__(&self, key: &PyAny) -> PyResult<Sketch> {
+        let idx = _get_sketch_index(&self.sketches, key)?;
+        Ok(self.sketches[idx].clone().into())
+    }
+
+    fn __delitem__(&mut self, key: &PyAny) -> PyResult<()> {
+        // TODO: if we ever allow sketches to just reference back to the
+        // Multisketch this function could prove problematic?
+        let idx = _get_sketch_index(&self.sketches, key)?;
+        self.sketches.remove(idx);
+        Ok(())
+    }
+}
+
+// TODO: we need support for adding and removing sketches from the Multisketch
+
+#[pyproto]
+impl PySequenceProtocol for Multisketch {
+    fn __contains__(&self, key: &str) -> PyResult<bool> {
+        // TODO: also use the same cache as above?
+        for sketch in &self.sketches {
+            if sketch.name == key {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 }
 
@@ -238,7 +288,8 @@ impl Sketch {
             sketch_params,
             filter_params: FilterParams::default(),
         };
-        obj.init(|_| Sketch { s })
+        obj.init(Sketch { s });
+        Ok(())
     }
 
     #[getter]
@@ -267,21 +318,34 @@ impl Sketch {
         Ok(self.s.comment.clone())
     }
 
+    #[setter]
+    fn set_comment(&mut self, value: &str) -> PyResult<()> {
+        self.s.comment = value.to_string();
+        Ok(())
+    }
+
     #[getter]
-    fn get_hashes(&self) -> PyResult<Vec<(u64, Py<PyBytes>, u32, u32)>> {
+    fn get_hashes(&self) -> PyResult<Vec<(u64, PyObject, u32, u32)>> {
         let gil = Python::acquire_gil();
         let py = gil.python();
-        Ok(self
-            .s
+        self.s
             .hashes
             .clone()
             .into_iter()
-            .map(|i| (i.hash, PyBytes::new(py, &i.kmer), i.count, i.extra_count))
-            .collect())
+            .map(|i| {
+                Ok((
+                    i.hash,
+                    PyBytes::new(py, &i.kmer).into(),
+                    i.count,
+                    i.extra_count,
+                ))
+            })
+            .collect()
     }
 
     #[getter]
     pub fn sketch_params(&self) -> PyResult<String> {
+        // FIXME: the return format here is not great
         Ok(match self.s.sketch_params {
             SketchParams::Mash {
                 kmers_to_sketch,
@@ -344,8 +408,7 @@ impl Sketch {
     /// that have 'high' hashes because they're under `size`, this will
     /// potentially remove those hashes if the new sketch is large enough).
     pub fn merge(&mut self, sketch: &Sketch, size: Option<usize>) -> PyResult<()> {
-        Ok(merge_sketches(&mut self.s, &sketch.s, size)
-            .map_err(|e| PyErr::new::<FinchError, _>(format!("{}", e)))?)
+        Ok(merge_sketches(&mut self.s, &sketch.s, size).map_err(to_pyerr)?)
     }
 
     /// compare(sketch, mash_mode=False)
@@ -353,8 +416,8 @@ impl Sketch {
     /// Calculates the containment within and jaccard similarity to another sketch.
     #[args(mash_mode = true)]
     pub fn compare(&self, sketch: &Sketch, mash_mode: bool) -> PyResult<(f64, f64)> {
-        let dist = distance(&self.s.hashes, &sketch.s.hashes, &"", &"", mash_mode)
-            .map_err(|e| PyErr::new::<FinchError, _>(format!("{}", e)))?;
+        let dist =
+            distance(&self.s.hashes, &sketch.s.hashes, &"", &"", mash_mode).map_err(to_pyerr)?;
 
         Ok((dist.containment, dist.jaccard))
     }
@@ -363,25 +426,86 @@ impl Sketch {
     ///
     /// Calculates the containment within and jaccard similarity to another scaled sketch.
     pub fn compare_scaled(&self, sketch: &Sketch) -> PyResult<(f64, f64)> {
-        let dist = distance_scaled(&self.s.hashes, &sketch.s.hashes, &"", &"")
-            .map_err(|e| PyErr::new::<FinchError, _>(format!("{}", e)))?;
+        let dist = distance_scaled(&self.s.hashes, &sketch.s.hashes, &"", &"").map_err(to_pyerr)?;
 
         Ok((dist.containment, dist.jaccard))
     }
 
     /// compare_counts(sketch)
     ///
-    ///
-    pub fn compare_counts(&self, sketch: &Sketch) -> PyResult<(u64, u64, u64, u64, u64)> {
-        Ok(common_counts(&self.s.hashes, &sketch.s.hashes))
+    /// e.g.
+    /// common, ref_pos, query_pos, ref_count, query_count, var, skew, kurt = db_sketch.compare_counts(query)
+    pub fn compare_counts(
+        &self,
+        sketch: &Sketch,
+    ) -> PyResult<(u64, u64, u64, u64, u64, f64, f64, f64)> {
+        let reference = &self.s.hashes;
+        let query = &sketch.s.hashes;
+        let mut common: u64 = 0;
+        let mut ref_pos: usize = 0;
+        let mut ref_count: u64 = 0;
+        let mut query_pos: usize = 0;
+        let mut query_count: u64 = 0;
+        // statistical moment calculation code derived from the example at:
+        // https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Higher-order_statistics
+        let mut query_mean: f64 = 0.;
+        let mut query_m2: f64 = 0.;
+        let mut query_m3: f64 = 0.;
+        let mut query_m4: f64 = 0.;
+
+        while (ref_pos < reference.len()) && (query_pos < query.len()) {
+            if reference[ref_pos].hash < query[query_pos].hash {
+                ref_pos += 1;
+            } else if query[query_pos].hash < reference[ref_pos].hash {
+                query_pos += 1;
+            } else {
+                // bump counts
+                ref_count += u64::from(reference[ref_pos].count);
+                query_count += u64::from(query[query_pos].count);
+                // bump query stats
+                let n = common as f64 + 1.;
+                let float_count = f64::from(query[query_pos].count);
+                let delta: f64 = float_count - query_mean;
+                let delta_n: f64 = delta / n;
+                let delta_n2: f64 = delta_n * delta_n;
+                let term1 = delta * delta_n * (n - 1.);
+
+                query_mean += delta_n;
+                query_m4 += term1 * delta_n2 * (n * n - 3. * n + 3.) + 6. * delta_n2 * query_m2
+                    - 4. * delta_n * query_m3;
+                query_m3 += term1 * delta_n * (n - 2.) - 3. * delta_n * query_m2;
+                query_m2 += term1;
+
+                // bump counters
+                ref_pos += 1;
+                query_pos += 1;
+                common += 1;
+            }
+        }
+
+        // mean is just (query_count / common) so we don't need to return it
+        let var = query_m2 / common as f64;
+        let skew = (common as f64).sqrt() * query_m3 / query_m2.powf(1.5);
+        let kurt = (common as f64) * query_m4 / (query_m2 * query_m2) - 3.;
+
+        Ok((
+            common,
+            ref_pos as u64,
+            query_pos as u64,
+            ref_count,
+            query_count,
+            var,
+            skew,
+            kurt,
+        ))
     }
 
-    // /// compare_matrix(*sketches)
-    // ///
-    // /// Generates a numpy matrix of hash/kmer counts aligned to a "primary"
-    // /// reference. This matrix can then be used for downstream NNLS analysis.
+    /// compare_matrix(*sketches)
+    ///
+    /// Generates a numpy matrix of hash/kmer counts aligned to a "primary"
+    /// reference. This matrix can then be used for downstream NNLS analysis.
     #[args(args = "*")]
-    pub fn compare_matrix(&self, args: &PyTuple) -> PyResult<Py<PyArray2<u64>>> {
+    pub fn compare_matrix(&self, args: &PyTuple) -> PyResult<Py<PyArray2<u32>>> {
         let sketches: Vec<&Sketch> = args.extract()?;
         let sketch_kmers: Vec<&[KmerCount]> = sketches.iter().map(|s| &s.s.hashes[..]).collect();
         let result = minmer_matrix(&self.s.hashes, &sketch_kmers);
@@ -392,12 +516,34 @@ impl Sketch {
     }
 
     #[getter]
-    pub fn get_counts(&self) -> PyResult<Py<PyArray1<u64>>> {
-        let result = self.s.hashes.iter().map(|k| u64::from(k.count));
+    pub fn get_counts(&self) -> PyResult<Py<PyArray1<u32>>> {
+        let result = self.s.hashes.iter().map(|k| k.count);
 
         let gil = Python::acquire_gil();
         let py = gil.python();
         Ok(PyArray::from_exact_iter(py, result).to_owned())
+    }
+
+    #[setter]
+    pub fn set_counts(&mut self, value: &PyArray1<u32>) -> PyResult<()> {
+        if value.len() != self.s.hashes.len() {
+            return Err(PyErr::new::<FinchError, _>("counts must be same length as sketch"));
+        }
+        self.s.hashes = self.s.hashes.iter().zip(value.as_array().iter()).filter_map(|(s, v)| {
+            if *v == 0 {
+                None
+            } else {
+                let mut s = s.clone();
+                s.count = *v;
+                Some(s)
+            }
+        }).collect();
+
+        Ok(())
+    }
+
+    pub fn copy(&self) -> PyResult<Sketch> {
+        Ok(Sketch { s: self.s.clone() })
     }
 }
 
@@ -415,9 +561,18 @@ impl PyMappingProtocol for Sketch {
     }
 }
 
+impl From<SType> for Sketch {
+    fn from(s: SType) -> Self {
+        Sketch { s }
+    }
+}
+
 // TODO: impl PyNumberProtocol addition or subtraction for Sketch to allow merging/
-// set difference calculations?
+// set difference calculations for sketches?
 // see https://github.com/PyO3/pyo3/blob/master/tests/test_arithmetics.rs for details
+
+// TODO: also it would be sweet to add a `str` to the Sketch to kmerize it and
+// add the kmers
 
 /// sketch_files(filenames, n_hashes, final_size, kmer_length, filter, seed)
 /// ---
@@ -449,31 +604,16 @@ pub fn sketch_files(
         err_filter: 1.,
         strand_filter: 0.1,
     };
-
-    Ok(Multisketch {
-        ms: rs_sketch_files(&filenames, &sketch_params, &filters)
-            .map_err(|e| PyErr::new::<FinchError, _>(format!("{}", e)))?,
-    })
+    let sketches = rs_sketch_files(&filenames, &sketch_params, &filters).map_err(to_pyerr)?;
+    Ok(Multisketch { sketches })
 }
 
-#[pyfunction]
-pub fn write_sketch_file(filename: &str, sketches: Vec<&Sketch>) -> PyResult<()> {
-    let fsketches: Vec<SType> = sketches.iter().map(|s| s.s.clone()).collect();
-
-    let mut out = File::create(&filename)
-        .map_err(|_| PyErr::new::<FinchError, _>(format!("Could not create {}", filename)))?;
-    write_finch_file(&mut out, &fsketches)
-        .map_err(|e| PyErr::new::<FinchError, _>(format!("{}", e)))?;
-    Ok(())
-}
-
-#[pymodinit]
 /// Finch is a MinHash sketch processing library.
+#[pymodule]
 fn finch(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<Multisketch>()?;
     m.add_class::<Sketch>()?;
-    m.add_function(wrap_function!(sketch_files))?;
-    m.add_function(wrap_function!(write_sketch_file))?;
+    m.add_wrapped(wrap_pyfunction!(sketch_files))?;
 
     Ok(())
 }

@@ -5,7 +5,7 @@ use clap::{App, Arg, ArgMatches};
 use failure::{bail, format_err};
 
 use crate::filtering::FilterParams;
-use crate::serialization::MultiSketch;
+use crate::serialization::Sketch;
 use crate::sketch_schemes::SketchParams;
 use crate::Result;
 
@@ -227,10 +227,11 @@ pub fn parse_sketch_options(
 pub fn update_sketch_params(
     matches: &ArgMatches,
     sketch_params: &mut SketchParams,
-    multisketch: &MultiSketch,
+    sketch: &Sketch,
     name: &str,
 ) -> Result<()> {
     // FIXME: check that the sketching type is concordant?
+    let new_sketch_params = &sketch.sketch_params;
 
     // if arguments weren't provided use the ones from the multisketch
     match sketch_params {
@@ -241,25 +242,27 @@ pub fn update_sketch_params(
             ..
         } => {
             if matches.occurrences_of("n_hashes") == 0 {
-                *final_size = multisketch.sketch_size as usize;
+                *final_size = new_sketch_params.expected_size();
             }
             if matches.occurrences_of("kmer_length") == 0 {
-                *kmer_length = multisketch.kmer;
-            } else if *kmer_length != multisketch.kmer {
+                *kmer_length = new_sketch_params.k();
+            } else if *kmer_length != new_sketch_params.k() {
                 bail!(
                     "Specified kmer length {} does not match {} from sketch {}",
                     kmer_length,
-                    multisketch.kmer,
+                    new_sketch_params.k(),
                     name
                 );
             }
+            // TODO: do we need to update any of the other sketch params?
+            let (_, _, new_hash_seed, _) = new_sketch_params.hash_info();
             if matches.occurrences_of("seed") == 0 {
-                *hash_seed = multisketch.hash_seed;
-            } else if *hash_seed != multisketch.hash_seed {
+                *hash_seed = new_hash_seed;
+            } else if *hash_seed != new_hash_seed {
                 bail!(
                     "Specified hash seed {} does not match {} from sketch {}",
                     hash_seed,
-                    multisketch.hash_seed,
+                    new_hash_seed,
                     name
                 );
             }

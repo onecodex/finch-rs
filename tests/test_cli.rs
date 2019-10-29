@@ -4,7 +4,7 @@ use std::process::Command;
 use assert_cmd::prelude::*;
 use predicates::prelude::predicate;
 
-use finch::serialization::{read_finch_file, read_mash_file, MultiSketch};
+use finch::serialization::{read_finch_file, read_mash_file, Sketch};
 
 #[test]
 fn file_doesnt_exist() -> Result<(), Box<dyn std::error::Error>> {
@@ -48,10 +48,11 @@ fn finch_sketch_bin() -> Result<(), Box<dyn std::error::Error>> {
 
     let output = Cursor::new(cmd.output().unwrap().stdout);
     let mut buf_reader = BufReader::new(output);
-    let sketch: MultiSketch = read_finch_file(&mut buf_reader)?;
-    assert_eq!(sketch.kmer, 21);
-    assert_eq!(sketch.alphabet, "ACGT");
-    assert_eq!(sketch.hash_seed, 0);
+    let sketch: Vec<Sketch> = read_finch_file(&mut buf_reader)?;
+    assert_eq!(sketch.len(), 1);
+    assert_eq!(sketch[0].sketch_params.k(), 21);
+    assert_eq!(sketch[0].sketch_params.expected_size(), 10);
+    assert_eq!(sketch[0].hashes.len(), 10);
     Ok(())
 }
 
@@ -67,13 +68,12 @@ fn finch_sketch_msh() -> Result<(), Box<dyn std::error::Error>> {
 
     let output = Cursor::new(cmd.output().unwrap().stdout);
     let mut buf_reader = BufReader::new(output);
-    let sketch: MultiSketch = read_mash_file(&mut buf_reader)?;
-    assert_eq!(sketch.kmer, 21);
-    assert_eq!(sketch.alphabet, "ACGT");
-    assert_eq!(sketch.hash_seed, 0);
-    //mash doesn't save this info...
-    //  assert_eq!(sketch.sketchSize, 10);
-
+    let sketch: Vec<Sketch> = read_mash_file(&mut buf_reader)?;
+    assert_eq!(sketch.len(), 1);
+    assert_eq!(sketch[0].sketch_params.k(), 21);
+    // mash doesn't set an expected size?
+    // assert_eq!(sketch[0].sketch_params.expected_size(), 10);
+    assert_eq!(sketch[0].hashes.len(), 10);
     Ok(())
 }
 

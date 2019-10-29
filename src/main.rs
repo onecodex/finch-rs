@@ -7,19 +7,18 @@ extern crate serde_json;
 
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
-use std::io::{stderr, stdout, BufReader, Write};
+use std::io::{stderr, stdout, Write};
 use std::process::exit;
 
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
-use memmap::MmapOptions;
 
 use finch::distance::distance;
 use finch::serialization::{
-    read_finch_file, read_mash_file, write_finch_file, write_mash_file, JsonSketch, MultiSketch,
+    write_finch_file, write_mash_file, MultiSketch,
     Sketch, SketchDistance, FINCH_BIN_EXT, FINCH_EXT, MASH_EXT,
 };
 use finch::statistics::{cardinality, hist};
-use finch::{sketch_files, Result};
+use finch::{open_sketch_file, sketch_files, Result};
 
 use finch::main_parsing::{
     add_filter_options, add_sketch_options, get_float_arg, get_int_arg, parse_filter_options,
@@ -111,12 +110,6 @@ fn run() -> Result<()> {
                 .long("mash-binary-format")
                 .conflicts_with("binary_format")
                 .help("Outputs sketch in a binary format compatible with `mash`"),
-        )
-        .arg(
-            Arg::with_name("drop_kmers")
-                .long("drop-kmers")
-                .takes_value(false)
-                .help("Strips kmers out of the resulting sketches; reduces file sizes"),
         );
     sketch_command = add_output_options(sketch_command);
     sketch_command = add_filter_options(sketch_command);
@@ -208,24 +201,19 @@ fn run() -> Result<()> {
         } else {
             FINCH_EXT
         };
-        let drop_kmers = matches.is_present("drop_kmers");
         if matches.is_present("output_file") || matches.is_present("std_out") {
-            let mut sketches = parse_mash_files(matches)?;
+            let sketches = parse_mash_files(matches)?;
             let output = matches.value_of("output_file");
-
-            if drop_kmers {
-                sketches.drop_all_kmers();
-            }
 
             output_to(
                 |writer| {
                     if matches.is_present("binary_format") {
-                        let fsketches: Vec<Sketch> = sketches.to_sketches();
-                        write_finch_file(writer, &fsketches)?;
+                        write_finch_file(writer, &sketches)?;
                     } else if matches.is_present("mash_binary_format") {
                         write_mash_file(writer, &sketches)?;
                     } else {
-                        serde_json::to_writer(writer, &sketches)?;
+                        let multisketch = MultiSketch::from_sketches(&sketches)?;
+                        serde_json::to_writer(writer, &multisketch)?;
                     }
                     Ok(())
                 },
@@ -234,7 +222,7 @@ fn run() -> Result<()> {
             )?;
         } else {
             // special case for "sketching in place"
-            generate_sketch_files(matches, file_ext, drop_kmers)?;
+            generate_sketch_files(matches, file_ext)?;
         }
     } else if let Some(matches) = matches.subcommand_matches("dist") {
         let mash_mode = matches.is_present("mash_mode");
@@ -244,7 +232,7 @@ fn run() -> Result<()> {
 
         let mut query_sketches = Vec::new();
         if matches.is_present("pairwise") {
-            for sketch in &all_sketches.sketches {
+            for sketch in &all_sketches {
                 query_sketches.push(sketch);
             }
         } else if matches.is_present("queries") {
@@ -254,20 +242,20 @@ fn run() -> Result<()> {
                 .map(|s| s.to_string())
                 .collect();
 
-            for sketch in all_sketches.sketches.iter() {
+            for sketch in &all_sketches {
                 if query_names.contains(&sketch.name) {
-                    query_sketches.push(sketch);
+                    query_sketches.push(&sketch);
                 }
             }
         } else {
-            if all_sketches.sketches.is_empty() {
+            if all_sketches.is_empty() {
                 bail!("No sketches present!");
             }
-            query_sketches.push(all_sketches.sketches.first().unwrap());
+            query_sketches.push(all_sketches.first().unwrap());
         }
 
         let distances =
-            calc_sketch_distances(&query_sketches, &all_sketches.sketches, mash_mode, max_dist);
+            calc_sketch_distances(&query_sketches, &all_sketches, mash_mode, max_dist);
 
         output_to(
             |writer| {
@@ -282,7 +270,7 @@ fn run() -> Result<()> {
         let mut hist_map: HashMap<String, Vec<u64>> = HashMap::new();
         let multisketch = parse_mash_files(matches)?;
 
-        for sketch in multisketch.sketches.iter() {
+        for sketch in multisketch {
             hist_map.insert(sketch.name.to_string(), hist(&sketch.hashes));
         }
 
@@ -299,13 +287,9 @@ fn run() -> Result<()> {
         // TODO: this should probably output JSON
         let multisketch = parse_mash_files(matches)?;
 
-        for sketch in multisketch.sketches.iter() {
+        for sketch in multisketch {
             print!("{}", &sketch.name);
-            if let Some(l) = sketch.seq_length {
-                println!(" (from {}bp)", l);
-            } else {
-                println!();
-            }
+            println!(" (from {}bp)", sketch.seq_length);
             let kmers = &sketch.hashes;
             if let Ok(c) = cardinality(kmers) {
                 println!("  Estimated # of Unique Kmers: {}", c);
@@ -344,7 +328,7 @@ fn run() -> Result<()> {
     Ok(())
 }
 
-fn generate_sketch_files(matches: &ArgMatches, file_ext: &str, drop_kmers: bool) -> Result<()> {
+fn generate_sketch_files(matches: &ArgMatches, file_ext: &str) -> Result<()> {
     let filenames: Vec<_> = matches
         .values_of("INPUT")
         .ok_or_else(|| format_err!("Bad INPUT"))?
@@ -363,27 +347,24 @@ fn generate_sketch_files(matches: &ArgMatches, file_ext: &str, drop_kmers: bool)
             bail!("Filename {} is not a sequence file?", filename);
         }
 
-        let mut multisketch = sketch_files(&[filename], &sketch_params, &filters)?;
-        if drop_kmers {
-            multisketch.drop_all_kmers();
-        }
+        let sketches = sketch_files(&[filename], &sketch_params, &filters)?;
 
         let out_filename = filename.to_string() + file_ext;
         let mut out = File::create(&out_filename)
             .map_err(|_| format_err!("Could not open {}", out_filename))?;
         if matches.is_present("binary_format") {
-            let fsketches: Vec<Sketch> = multisketch.to_sketches();
-            write_finch_file(&mut out, &fsketches)?;
+            write_finch_file(&mut out, &sketches)?;
         } else if matches.is_present("mash_binary_format") {
-            write_mash_file(&mut out, &multisketch)?;
+            write_mash_file(&mut out, &sketches)?;
         } else {
+            let multisketch: MultiSketch = MultiSketch::from_sketches(&sketches)?;
             serde_json::to_writer(&mut out, &multisketch)?;
         }
     }
     Ok(())
 }
 
-fn parse_mash_files(matches: &ArgMatches) -> Result<MultiSketch> {
+fn parse_mash_files(matches: &ArgMatches) -> Result<Vec<Sketch>> {
     let filenames: Vec<_> = matches
         .values_of("INPUT")
         .ok_or_else(|| format_err!("Bad INPUT"))?
@@ -409,9 +390,9 @@ fn parse_mash_files(matches: &ArgMatches) -> Result<MultiSketch> {
 
     let mut filename_iter = sketch_filenames.iter();
     if let Some(first_filename) = filename_iter.next() {
-        let mut multisketch = open_sketch_file(first_filename)?;
+        let mut sketches = open_sketch_file(first_filename)?;
 
-        update_sketch_params(matches, &mut sketch_params, &multisketch, first_filename)?;
+        update_sketch_params(matches, &mut sketch_params, &sketches[0], first_filename)?;
         // we also have to handle updating filter options separately because
         // kmer_length changes how we calculate the `err_filter`
         if matches.occurrences_of("kmer_length") == 0 {
@@ -420,41 +401,44 @@ fn parse_mash_files(matches: &ArgMatches) -> Result<MultiSketch> {
 
         // now do the filtering for the first sketch file
         if filters.filter_on == Some(true) {
-            for sketch in &mut multisketch.sketches {
-                sketch.apply_filtering(&filters);
+            for mut sketch in &mut sketches {
+                filters.filter_sketch(&mut sketch);
             }
         }
 
         // and then handle the rest of the sketch files
         for filename in filename_iter {
-            multisketch.extend(&open_sketch_file(filename)?, filename)?;
+            let extra_sketches = open_sketch_file(filename)?;
+            // FIXME: check extra_sketches are compatible with sketches?
+            sketches.extend(extra_sketches);
             if filters.filter_on == Some(true) {
-                for sketch in &mut multisketch.sketches {
-                    sketch.apply_filtering(&filters);
+                for mut sketch in &mut sketches {
+                    filters.filter_sketch(&mut sketch);
                 }
             }
         }
 
         // now handle the sequences
-        multisketch.extend(&sketch_files(&seq_filenames, &sketch_params, &filters)?, "")?;
-        Ok(multisketch)
+        let extra_sketches = sketch_files(&seq_filenames, &sketch_params, &filters)?;
+        // FIXME: check extra_sketches are compatible with sketches?
+        sketches.extend(extra_sketches);
+        Ok(sketches)
     } else {
         // now handle the sequences
-        let multisketch = sketch_files(&seq_filenames, &sketch_params, &filters)?;
-        Ok(multisketch)
+        sketch_files(&seq_filenames, &sketch_params, &filters)
     }
 }
 
 fn calc_sketch_distances(
-    query_sketches: &[&JsonSketch],
-    ref_sketches: &[JsonSketch],
+    query_sketches: &[&Sketch],
+    ref_sketches: &[Sketch],
     mash_mode: bool,
     max_distance: f64,
 ) -> Vec<SketchDistance> {
     let mut distances = Vec::new();
-    for ref_sketch in ref_sketches.iter() {
+    for ref_sketch in ref_sketches {
         let rsketch = &ref_sketch.hashes;
-        for query_sketch in query_sketches.iter() {
+        for query_sketch in query_sketches {
             if query_sketch == &ref_sketch {
                 continue;
             }
@@ -473,20 +457,4 @@ fn calc_sketch_distances(
         }
     }
     distances
-}
-
-fn open_sketch_file(filename: &str) -> Result<MultiSketch> {
-    // otherwise we just open the file and return the sketches
-    let file = File::open(filename).map_err(|_| format_err!("Error opening {}", &filename))?;
-    if filename.ends_with(MASH_EXT) {
-        let mut buf_reader = BufReader::new(file);
-        Ok(read_mash_file(&mut buf_reader)?)
-    } else if filename.ends_with(FINCH_BIN_EXT) {
-        let mut buf_reader = BufReader::new(file);
-        Ok(read_finch_file(&mut buf_reader)?)
-    } else {
-        let mapped = unsafe { MmapOptions::new().map(&file)? };
-        Ok(serde_json::from_slice(&mapped)
-            .map_err(|_| format_err!("Error parsing {}", &filename))?)
-    }
 }

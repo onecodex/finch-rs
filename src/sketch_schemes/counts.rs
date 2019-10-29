@@ -29,7 +29,10 @@ impl SketchScheme for AllCountsSketcher {
     }
 
     fn total_bases_and_kmers(&self) -> (u64, u64) {
-        (self.total_bases, self.counts.iter().map(|x| u64::from(*x)).sum())
+        (
+            self.total_bases,
+            self.counts.iter().map(|x| u64::from(*x)).sum(),
+        )
     }
 
     fn to_vec(&self) -> Vec<KmerCount> {

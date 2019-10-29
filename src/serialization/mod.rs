@@ -42,8 +42,7 @@ pub struct SketchDistance {
     pub reference: String,
 }
 
-// TODO: use this as the "base" sketch model within finch some day
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Sketch {
     pub name: String,
     pub seq_length: u64,
@@ -180,7 +179,7 @@ pub fn write_finch_file(mut file: &mut dyn Write, sketches: &[Sketch]) -> Result
     Ok(())
 }
 
-pub fn read_finch_file(mut file: &mut dyn BufRead) -> Result<MultiSketch> {
+pub fn read_finch_file(mut file: &mut dyn BufRead) -> Result<Vec<Sketch>> {
     let options = *message::ReaderOptions::new().traversal_limit_in_words(1024 * 1024 * 1024);
     let reader = capnp_serialize::read_message(&mut file, options)?;
     let cap_data: multisketch::Reader = reader.get_root::<multisketch::Reader>()?;
@@ -229,5 +228,5 @@ pub fn read_finch_file(mut file: &mut dyn BufRead) -> Result<MultiSketch> {
             filter_params,
         });
     }
-    Ok(MultiSketch::from_sketches(&sketches))
+    Ok(sketches)
 }

@@ -1,11 +1,13 @@
 use std::cmp;
 use std::collections::HashMap;
 
+use crate::serialization::Sketch;
 use crate::sketch_schemes::KmerCount;
 use crate::statistics::hist;
+use crate::Result;
 
 /// Used to pass around filter options for sketching
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct FilterParams {
     pub filter_on: Option<bool>,
     pub abun_filter: (Option<u32>, Option<u32>),
@@ -14,9 +16,22 @@ pub struct FilterParams {
 }
 
 impl FilterParams {
-    /// Returns the filtered kmer counts and the low abundance cutoff, if there
-    /// was a different one determined from the err_filter.
-    pub fn filter_sketch(&mut self, hashes: &[KmerCount]) -> Vec<KmerCount> {
+    /// Filter the sketch according to these FilterParams
+    pub fn filter_sketch(&self, sketch: &mut Sketch) {
+        // make a copy of myself so any updates from the data don't change
+        // my own parameters
+        let mut filters_copy = self.clone();
+        filters_copy.filter_counts(&sketch.hashes);
+        // FIXME: we need to update any parameters that are stricter than the
+        // ones in the existing `sketch.filter_params` not blanket overwrite
+        sketch.filter_params = filters_copy;
+    }
+
+    /// Returns the filtered kmer counts.
+    ///
+    /// If the err filter determined a different low_abundance_filter update
+    /// self to that one.
+    pub fn filter_counts(&mut self, hashes: &[KmerCount]) -> Vec<KmerCount> {
         let filter_on = self.filter_on == Some(true);
         let mut filtered_hashes = hashes.to_vec();
 
@@ -66,25 +81,29 @@ impl FilterParams {
         filter_stats
     }
 
-    pub fn from_serialized(filters: &HashMap<String, String>) -> Self {
-        // TODO: remove unwraps and make this return a result
-        FilterParams {
+    pub fn from_serialized(filters: &HashMap<String, String>) -> Result<Self> {
+        let low_abun = if let Some(min_copies) = filters.get("minCopies") {
+            Some(min_copies.parse()?)
+        } else {
+            None
+        };
+        let high_abun = if let Some(max_copies) = filters.get("maxCopies") {
+            Some(max_copies.parse()?)
+        } else {
+            None
+        };
+        Ok(FilterParams {
             filter_on: Some(!filters.is_empty()),
-            abun_filter: (
-                filters.get("minCopies").map(|x| x.parse().unwrap()),
-                filters.get("maxCopies").map(|x| x.parse().unwrap()),
-            ),
+            abun_filter: (low_abun, high_abun),
             err_filter: filters
                 .get("errFilter")
                 .unwrap_or(&"0".to_string())
-                .parse()
-                .unwrap(),
+                .parse()?,
             strand_filter: filters
                 .get("strandFilter")
                 .unwrap_or(&"0".to_string())
-                .parse()
-                .unwrap(),
-        }
+                .parse()?,
+        })
     }
 }
 

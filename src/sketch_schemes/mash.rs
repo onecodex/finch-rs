@@ -45,7 +45,10 @@ impl MashSketcher {
         if add_hash {
             if self.counts.contains_key(&new_hash) {
                 let count = self.counts.entry(new_hash).or_insert((0, 0));
-                (*count) = ((*count).0.saturating_add(1), (*count).1.saturating_add(u32::from(extra_count)));
+                (*count) = (
+                    (*count).0.saturating_add(1),
+                    (*count).1.saturating_add(u32::from(extra_count)),
+                );
             } else {
                 self.hashes.push(HashedItem {
                     hash: new_hash,
