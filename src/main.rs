@@ -14,8 +14,8 @@ use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 
 use finch::distance::distance;
 use finch::serialization::{
-    write_finch_file, write_mash_file, MultiSketch,
-    Sketch, SketchDistance, FINCH_BIN_EXT, FINCH_EXT, MASH_EXT,
+    write_finch_file, write_mash_file, MultiSketch, Sketch, SketchDistance, FINCH_BIN_EXT,
+    FINCH_EXT, MASH_EXT,
 };
 use finch::statistics::{cardinality, hist};
 use finch::{open_sketch_file, sketch_files, Result};
@@ -254,8 +254,7 @@ fn run() -> Result<()> {
             query_sketches.push(all_sketches.first().unwrap());
         }
 
-        let distances =
-            calc_sketch_distances(&query_sketches, &all_sketches, mash_mode, max_dist);
+        let distances = calc_sketch_distances(&query_sketches, &all_sketches, mash_mode, max_dist);
 
         output_to(
             |writer| {

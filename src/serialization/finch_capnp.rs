@@ -587,6 +587,15 @@ pub mod kmer_count {
         pub fn get_extra_count(self) -> u32 {
             self.reader.get_data_field::<u32>(3)
         }
+        #[inline]
+        pub fn get_label(self) -> ::capnp::Result<::capnp::data::Reader<'a>> {
+            self.reader
+                .get_pointer_field(1)
+                .get_data(::std::ptr::null(), 0)
+        }
+        pub fn has_label(&self) -> bool {
+            !self.reader.get_pointer_field(1).is_null()
+        }
     }
 
     pub struct Builder<'a> {
@@ -702,6 +711,23 @@ pub mod kmer_count {
         pub fn set_extra_count(&mut self, value: u32) {
             self.builder.set_data_field::<u32>(3, value);
         }
+        #[inline]
+        pub fn get_label(self) -> ::capnp::Result<::capnp::data::Builder<'a>> {
+            self.builder
+                .get_pointer_field(1)
+                .get_data(::std::ptr::null(), 0)
+        }
+        #[inline]
+        pub fn set_label(&mut self, value: ::capnp::data::Reader) {
+            self.builder.get_pointer_field(1).set_data(value);
+        }
+        #[inline]
+        pub fn init_label(self, size: u32) -> ::capnp::data::Builder<'a> {
+            self.builder.get_pointer_field(1).init_data(size)
+        }
+        pub fn has_label(&self) -> bool {
+            !self.builder.get_pointer_field(1).is_null()
+        }
     }
 
     pub struct Pipeline {
@@ -719,7 +745,7 @@ pub mod kmer_count {
         use capnp::private::layout;
         pub const STRUCT_SIZE: layout::StructSize = layout::StructSize {
             data: 2,
-            pointers: 1,
+            pointers: 2,
         };
         pub const TYPE_ID: u64 = 0x854e_abfe_76ab_932c;
     }

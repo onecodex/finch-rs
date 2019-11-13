@@ -5,7 +5,7 @@ extern crate capnp;
 extern crate serde_derive;
 
 use std::fs::File;
-use std::io::{BufReader, stdin, Read};
+use std::io::{stdin, BufReader, Read};
 use std::path::Path;
 use std::result::Result as StdResult;
 
@@ -15,7 +15,9 @@ use needletail::formats::parse_sequence_reader;
 use rayon::prelude::*;
 
 use crate::filtering::FilterParams;
-use crate::serialization::{read_finch_file, read_mash_file, MultiSketch, Sketch, FINCH_BIN_EXT, FINCH_EXT, MASH_EXT};
+use crate::serialization::{
+    read_finch_file, read_mash_file, MultiSketch, Sketch, FINCH_BIN_EXT, FINCH_EXT, MASH_EXT,
+};
 use crate::sketch_schemes::SketchParams;
 
 pub mod distance;
@@ -98,7 +100,6 @@ pub fn sketch_stream<'a>(
     })
 }
 
-
 pub fn open_sketch_file(filename: &str) -> Result<Vec<Sketch>> {
     let file = File::open(filename).map_err(|_| format_err!("Error opening {}", &filename))?;
     if filename.ends_with(MASH_EXT) {
@@ -109,7 +110,7 @@ pub fn open_sketch_file(filename: &str) -> Result<Vec<Sketch>> {
         // or should we do that on write?
         let mut buf_reader = BufReader::new(file);
         read_finch_file(&mut buf_reader)
-    } else if filename.ends_with(FINCH_EXT) || filename.ends_with(".json"){
+    } else if filename.ends_with(FINCH_EXT) || filename.ends_with(".json") {
         let mapped = unsafe { MmapOptions::new().map(&file)? };
         let multisketch: MultiSketch = serde_json::from_slice(&mapped)
             .map_err(|_| format_err!("Error parsing {}", &filename))?;

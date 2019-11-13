@@ -51,6 +51,7 @@ impl SketchScheme for AllCountsSketcher {
                 kmer: bitmer_to_bytes((ix as u64, self.k)),
                 count,
                 extra_count,
+                label: None,
             };
             results.push(new_item);
         }

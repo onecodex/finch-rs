@@ -112,6 +112,7 @@ impl<'de> Deserialize<'de> for JsonSketch {
                 kmer,
                 count,
                 extra_count: count / 2,
+                label: None,
             });
         }
         Ok(JsonSketch {

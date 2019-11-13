@@ -107,6 +107,7 @@ pub fn read_mash_file(mut file: &mut dyn BufRead) -> FinchResult<Vec<Sketch>> {
                     kmer: Vec::new(),
                     count: 1,
                     extra_count: 0,
+                    label: None,
                 })
                 .collect()
         } else {
@@ -118,6 +119,7 @@ pub fn read_mash_file(mut file: &mut dyn BufRead) -> FinchResult<Vec<Sketch>> {
                     kmer: Vec::new(),
                     count: c,
                     extra_count: c / 2,
+                    label: None,
                 })
                 .collect()
         };

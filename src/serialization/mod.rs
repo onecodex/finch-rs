@@ -155,6 +155,9 @@ pub fn write_finch_file(mut file: &mut dyn Write, sketches: &[Sketch]) -> Result
             cap_hash.set_kmer(&hash.kmer);
             cap_hash.set_count(hash.count);
             cap_hash.set_extra_count(hash.extra_count);
+            if let Some(label) = &hash.label {
+                cap_hash.set_label(label);
+            }
         }
 
         let mut cap_filter_params = cap_sketch.reborrow().init_filter_params();
@@ -190,11 +193,17 @@ pub fn read_finch_file(mut file: &mut dyn BufRead) -> Result<Vec<Sketch>> {
         let cap_hashes = cap_sketch.get_hashes()?;
         let mut hashes = Vec::with_capacity(cap_hashes.len() as usize);
         for cap_hash in cap_hashes {
+            let label = if cap_hash.has_label() {
+                Some(cap_hash.get_label()?.to_vec())
+            } else {
+                None
+            };
             hashes.push(KmerCount {
                 hash: cap_hash.get_hash(),
                 kmer: cap_hash.get_kmer()?.to_vec(),
                 count: cap_hash.get_count(),
                 extra_count: cap_hash.get_extra_count(),
+                label,
             });
         }
 

@@ -254,7 +254,6 @@ pub fn update_sketch_params(
                     name
                 );
             }
-            // TODO: do we need to update any of the other sketch params?
             let (_, _, new_hash_seed, _) = new_sketch_params.hash_info();
             if matches.occurrences_of("seed") == 0 {
                 *hash_seed = new_hash_seed;
@@ -266,8 +265,62 @@ pub fn update_sketch_params(
                     name
                 );
             }
+            // TODO: do we need to update any of the other sketch params?
         }
-        _ => {}
+        SketchParams::Scaled {
+            kmer_length,
+            hash_seed,
+            scale,
+            ..
+        } => {
+            // TODO: these two are identical to above so some DRY might be good?
+            if matches.occurrences_of("kmer_length") == 0 {
+                *kmer_length = new_sketch_params.k();
+            } else if *kmer_length != new_sketch_params.k() {
+                bail!(
+                    "Specified kmer length {} does not match {} from sketch {}",
+                    kmer_length,
+                    new_sketch_params.k(),
+                    name
+                );
+            }
+            let (_, _, new_hash_seed, new_scale) = new_sketch_params.hash_info();
+            if matches.occurrences_of("seed") == 0 {
+                *hash_seed = new_hash_seed;
+            } else if *hash_seed != new_hash_seed {
+                bail!(
+                    "Specified hash seed {} does not match {} from sketch {}",
+                    hash_seed,
+                    new_hash_seed,
+                    name
+                );
+            }
+
+            if let Some(new_scale_num) = new_scale {
+                if matches.occurrences_of("scale") == 0 {
+                    *scale = new_scale_num;
+                } else if *scale != new_scale_num {
+                    bail!(
+                        "Specified scale {} does not match {} from sketch {}",
+                        scale,
+                        new_scale_num,
+                        name
+                    );
+                }
+            }
+        }
+        SketchParams::AllCounts { kmer_length } => {
+            if matches.occurrences_of("kmer_length") == 0 {
+                *kmer_length = new_sketch_params.k();
+            } else if *kmer_length != new_sketch_params.k() {
+                bail!(
+                    "Specified kmer length {} does not match {} from sketch {}",
+                    kmer_length,
+                    new_sketch_params.k(),
+                    name
+                );
+            }
+        }
     }
     Ok(())
 }

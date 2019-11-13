@@ -90,6 +90,7 @@ impl SketchScheme for ScaledSketcher {
                 kmer: item.item,
                 count: counts.0,
                 extra_count: counts.1,
+                label: None,
             };
             results.push(new_item);
         }

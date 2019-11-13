@@ -36,6 +36,7 @@ struct KmerCount {
   kmer @1 :Data; 
   count @2 :UInt32;
   extraCount @3 :UInt32;
+  label @4 :Data;
 }
 
 struct Sketch {

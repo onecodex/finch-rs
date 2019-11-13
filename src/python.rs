@@ -13,7 +13,7 @@ use crate::distance::{best_distance, distance, distance_scaled, minmer_matrix};
 use crate::filtering::FilterParams;
 use crate::serialization::{write_finch_file, Sketch as SType};
 use crate::sketch_schemes::{KmerCount, SketchParams};
-use crate::{Result as FinchResult, sketch_files as rs_sketch_files, open_sketch_file};
+use crate::{open_sketch_file, sketch_files as rs_sketch_files, Result as FinchResult};
 
 create_exception!(finch, FinchError, pyo3::exceptions::Exception);
 
@@ -103,7 +103,9 @@ impl Multisketch {
     /// Takes a file path to a `.sk`, `.bsk` or a `.mash` file and returns the Multisketch
     /// represented by that file.
     pub fn open(_cls: &PyType, filename: &str) -> PyResult<Multisketch> {
-        Ok(Multisketch { sketches: open_sketch_file(filename).map_err(to_pyerr)? })
+        Ok(Multisketch {
+            sketches: open_sketch_file(filename).map_err(to_pyerr)?,
+        })
     }
 
     #[classmethod]
@@ -134,7 +136,9 @@ impl Multisketch {
         let mut min_dist: f64 = 1.;
         for (ix, sketch) in self.sketches.iter().enumerate() {
             // TODO: use best_distance here and elsewhere?
-            let dist = distance_scaled(&sketch.hashes, &query.s.hashes, &sketch.name, &query.s.name).map_err(to_pyerr)?;
+            let dist =
+                distance_scaled(&sketch.hashes, &query.s.hashes, &sketch.name, &query.s.name)
+                    .map_err(to_pyerr)?;
             if (1. - dist.containment) < min_dist {
                 min_dist = 1. - dist.containment;
                 min_sketch = ix;
@@ -164,11 +168,7 @@ impl Multisketch {
 #[pyproto]
 impl PyIterProtocol for Multisketch {
     fn __iter__(slf: PyRefMut<Self>) -> PyResult<SketchIter> {
-        let sketches = slf
-            .sketches
-            .iter()
-            .map(|s| s.clone().into())
-            .collect();
+        let sketches = slf.sketches.iter().map(|s| s.clone().into()).collect();
         Ok(SketchIter { sketches })
     }
 }
@@ -220,7 +220,9 @@ fn _get_sketch_index(sketches: &[SType], key: &PyAny) -> PyResult<usize> {
             Err(PyErr::new::<KeyError, _>(str_key.to_string()))
         }
     } else {
-        Err(PyErr::new::<FinchError, _>("key is not a string or integer"))
+        Err(PyErr::new::<FinchError, _>(
+            "key is not a string or integer",
+        ))
     }
 }
 
@@ -527,17 +529,25 @@ impl Sketch {
     #[setter]
     pub fn set_counts(&mut self, value: &PyArray1<u32>) -> PyResult<()> {
         if value.len() != self.s.hashes.len() {
-            return Err(PyErr::new::<FinchError, _>("counts must be same length as sketch"));
+            return Err(PyErr::new::<FinchError, _>(
+                "counts must be same length as sketch",
+            ));
         }
-        self.s.hashes = self.s.hashes.iter().zip(value.as_array().iter()).filter_map(|(s, v)| {
-            if *v == 0 {
-                None
-            } else {
-                let mut s = s.clone();
-                s.count = *v;
-                Some(s)
-            }
-        }).collect();
+        self.s.hashes = self
+            .s
+            .hashes
+            .iter()
+            .zip(value.as_array().iter())
+            .filter_map(|(s, v)| {
+                if *v == 0 {
+                    None
+                } else {
+                    let mut s = s.clone();
+                    s.count = *v;
+                    Some(s)
+                }
+            })
+            .collect();
 
         Ok(())
     }
