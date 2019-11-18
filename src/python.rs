@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::fmt::Display;
 use std::fs::File;
 
@@ -49,6 +49,7 @@ fn merge_sketches(sketch: &mut SType, other: &SType, size: Option<usize>) -> Fin
                 kmer: sketch1[i].kmer.clone(),
                 count: sketch1[i].count + sketch2[j].count,
                 extra_count: sketch1[i].extra_count + sketch2[j].extra_count,
+                label: sketch1[i].label.clone(),
             });
             i += 1;
             j += 1;
@@ -127,24 +128,55 @@ impl Multisketch {
         Ok(())
     }
 
-    /// best_match(sketch: Sketch)
+    /// best_match(query: Sketch) -> (usize, Sketch)
     pub fn best_match(&self, query: &Sketch) -> PyResult<(usize, Sketch)> {
         // TODO: this should return an error if self.sketches is empty?
-        let mut min_sketch: usize = 0;
+        let mut best_sketch: usize = 0;
         // since this is a query against a set of references we're using
-        // 1 - containment as the comparison metric
-        let mut min_dist: f64 = 1.;
+        // containment as our metric
+        let mut max_containment: f64 = 0.;
         for (ix, sketch) in self.sketches.iter().enumerate() {
             // TODO: use best_distance here and elsewhere?
             let dist =
                 distance_scaled(&sketch.hashes, &query.s.hashes, &sketch.name, &query.s.name)
                     .map_err(to_pyerr)?;
-            if (1. - dist.containment) < min_dist {
-                min_dist = 1. - dist.containment;
-                min_sketch = ix;
+            if dist.containment > max_containment {
+                max_containment = dist.containment;
+                best_sketch = ix;
             }
         }
-        Ok((min_sketch, self.sketches[min_sketch].clone().into()))
+        Ok((best_sketch, self.sketches[best_sketch].clone().into()))
+    }
+
+    /// filter_to_matches(sketch: Sketch, threshold: f64)
+    ///
+    /// Removes sketches that don't match the provided sketch within some
+    /// threshold. The threshold is a containment threshold so higher values
+    /// are more stringent.
+    pub fn filter_to_matches(&mut self, query: &Sketch, threshold: f64) -> PyResult<()> {
+        let mut filtered_sketches = Vec::new();
+        for sketch in &self.sketches {
+            // TODO: use best_distance here and elsewhere?
+            let dist = distance_scaled(&sketch.hashes, &query.s.hashes, &sketch.name, &query.s.name)
+                .map_err(to_pyerr)?;
+            if dist.containment >= threshold {
+                filtered_sketches.push(sketch.clone());
+            }
+        }
+        self.sketches = filtered_sketches;
+        Ok(())
+    }
+
+    /// filter_to_names(names: List[str])
+    ///
+    /// Removes any sketches without names in the provided list.
+    pub fn filter_to_names(&mut self, names: &PyList) -> PyResult<()> {
+        let sketch_names: Vec<&str> = names.extract()?;
+        let name_set: HashSet<&str> = sketch_names.into_iter().collect();
+        self.sketches.retain(|s| {
+            name_set.contains::<str>(s.name.as_ref())
+        });
+        Ok(())
     }
 
     // TODO: this is a little niche/untested; do we want this?
@@ -507,7 +539,7 @@ impl Sketch {
     /// Generates a numpy matrix of hash/kmer counts aligned to a "primary"
     /// reference. This matrix can then be used for downstream NNLS analysis.
     #[args(args = "*")]
-    pub fn compare_matrix(&self, args: &PyTuple) -> PyResult<Py<PyArray2<u32>>> {
+    pub fn compare_matrix(&self, args: &PyTuple) -> PyResult<Py<PyArray2<i32>>> {
         let sketches: Vec<&Sketch> = args.extract()?;
         let sketch_kmers: Vec<&[KmerCount]> = sketches.iter().map(|s| &s.s.hashes[..]).collect();
         let result = minmer_matrix(&self.s.hashes, &sketch_kmers);
@@ -518,8 +550,8 @@ impl Sketch {
     }
 
     #[getter]
-    pub fn get_counts(&self) -> PyResult<Py<PyArray1<u32>>> {
-        let result = self.s.hashes.iter().map(|k| k.count);
+    pub fn get_counts(&self) -> PyResult<Py<PyArray1<i32>>> {
+        let result = self.s.hashes.iter().map(|k| k.count as i32);
 
         let gil = Python::acquire_gil();
         let py = gil.python();
@@ -527,28 +559,25 @@ impl Sketch {
     }
 
     #[setter]
-    pub fn set_counts(&mut self, value: &PyArray1<u32>) -> PyResult<()> {
+    pub fn set_counts(&mut self, value: &PyArray1<i32>) -> PyResult<()> {
         if value.len() != self.s.hashes.len() {
             return Err(PyErr::new::<FinchError, _>(
                 "counts must be same length as sketch",
             ));
         }
-        self.s.hashes = self
-            .s
-            .hashes
-            .iter()
-            .zip(value.as_array().iter())
-            .filter_map(|(s, v)| {
-                if *v == 0 {
-                    None
-                } else {
-                    let mut s = s.clone();
-                    s.count = *v;
-                    Some(s)
-                }
-            })
-            .collect();
-
+        let mut new_hashes = Vec::new();
+        for (s, v) in self.s.hashes.iter_mut().zip(value.as_array().iter()) {
+            if *v < 0 {
+                return Err(PyErr::new::<FinchError, _>(
+                    format!("Negative count {} not supported", *v)
+                ));
+            } else if *v > 0 {
+                let mut new_s = s.clone();
+                new_s.count = *v as u32;
+                new_hashes.push(new_s);
+            }
+        }
+        self.s.hashes = new_hashes;
         Ok(())
     }
 

@@ -41,18 +41,21 @@ fn test_hist() {
             kmer: vec![],
             count: 1,
             extra_count: 0,
+            label: None,
         },
         KmerCount {
             hash: 2,
             kmer: vec![],
             count: 1,
             extra_count: 0,
+            label: None,
         },
         KmerCount {
             hash: 3,
             kmer: vec![],
             count: 1,
             extra_count: 0,
+            label: None,
         },
     ];
 
@@ -66,24 +69,28 @@ fn test_hist() {
             kmer: vec![],
             count: 4,
             extra_count: 0,
+            label: None,
         },
         KmerCount {
             hash: 2,
             kmer: vec![],
             count: 2,
             extra_count: 0,
+            label: None,
         },
         KmerCount {
             hash: 3,
             kmer: vec![],
             count: 4,
             extra_count: 0,
+            label: None,
         },
         KmerCount {
             hash: 4,
             kmer: vec![],
             count: 3,
             extra_count: 0,
+            label: None,
         },
     ];
 

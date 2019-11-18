@@ -198,11 +198,11 @@ pub fn raw_distance(sketch1: &[KmerCount], sketch2: &[KmerCount]) -> (f64, f64, 
 // TODO: add another method like this to allow 0's in ref sketch for hashes present in sketches?
 // TODO: maybe we want to do NNLS on these matrices here too? https://github.com/igmanthony/fnnls/blob/master/src/fnnls.rs
 // (for comments about that code also see https://github.com/rust-ndarray/ndarray/issues/649 )
-pub fn minmer_matrix<U>(ref_sketch: &[KmerCount], sketches: &[U]) -> Array2<u32>
+pub fn minmer_matrix<U>(ref_sketch: &[KmerCount], sketches: &[U]) -> Array2<i32>
 where
     U: AsRef<[KmerCount]>,
 {
-    let mut result = Array2::<u32>::zeros((sketches.len(), ref_sketch.len()));
+    let mut result = Array2::<i32>::zeros((sketches.len(), ref_sketch.len()));
 
     for (i, sketch) in sketches.iter().map(|s| s.as_ref()).enumerate() {
         let mut ref_pos = 0;
@@ -212,7 +212,7 @@ where
             }
 
             if hash.hash == ref_sketch[ref_pos].hash {
-                result[[i, ref_pos]] = hash.count;
+                result[[i, ref_pos]] = hash.count as i32;
             }
         }
     }

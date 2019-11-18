@@ -179,6 +179,7 @@ fn test_guess_filter_threshold() {
         kmer: vec![],
         count: 1,
         extra_count: 0,
+        label: None,
     }];
     let cutoff = guess_filter_threshold(&sketch, 0.2);
     assert_eq!(cutoff, 1);
@@ -189,12 +190,14 @@ fn test_guess_filter_threshold() {
             kmer: vec![],
             count: 1,
             extra_count: 0,
+            label: None,
         },
         KmerCount {
             hash: 2,
             kmer: vec![],
             count: 1,
             extra_count: 0,
+            label: None,
         },
     ];
     let cutoff = guess_filter_threshold(&sketch, 0.2);
@@ -206,12 +209,14 @@ fn test_guess_filter_threshold() {
             kmer: vec![],
             count: 1,
             extra_count: 0,
+            label: None,
         },
         KmerCount {
             hash: 2,
             kmer: vec![],
             count: 9,
             extra_count: 0,
+            label: None,
         },
     ];
     let cutoff = guess_filter_threshold(&sketch, 0.2);
@@ -223,24 +228,28 @@ fn test_guess_filter_threshold() {
             kmer: vec![],
             count: 1,
             extra_count: 0,
+            label: None,
         },
         KmerCount {
             hash: 2,
             kmer: vec![],
             count: 10,
             extra_count: 0,
+            label: None,
         },
         KmerCount {
             hash: 3,
             kmer: vec![],
             count: 10,
             extra_count: 0,
+            label: None,
         },
         KmerCount {
             hash: 4,
             kmer: vec![],
             count: 9,
             extra_count: 0,
+            label: None,
         },
     ];
     let cutoff = guess_filter_threshold(&sketch, 0.1);
@@ -252,24 +261,28 @@ fn test_guess_filter_threshold() {
             kmer: vec![],
             count: 1,
             extra_count: 0,
+            label: None,
         },
         KmerCount {
             hash: 2,
             kmer: vec![],
             count: 1,
             extra_count: 0,
+            label: None,
         },
         KmerCount {
             hash: 3,
             kmer: vec![],
             count: 2,
             extra_count: 0,
+            label: None,
         },
         KmerCount {
             hash: 4,
             kmer: vec![],
             count: 4,
             extra_count: 0,
+            label: None,
         },
     ];
     let cutoff = guess_filter_threshold(&sketch, 0.1);
@@ -281,6 +294,7 @@ fn test_guess_filter_threshold() {
         kmer: vec![],
         count: 2,
         extra_count: 0,
+        label: None,
     }];
     let cutoff = guess_filter_threshold(&sketch, 1.);
     assert_eq!(cutoff, 2);
@@ -310,12 +324,14 @@ fn test_filter_abundance() {
             kmer: vec![],
             count: 1,
             extra_count: 0,
+            label: None,
         },
         KmerCount {
             hash: 2,
             kmer: vec![],
             count: 1,
             extra_count: 0,
+            label: None,
         },
     ];
     let filtered = filter_abundance(&sketch, Some(1), None);
@@ -329,24 +345,28 @@ fn test_filter_abundance() {
             kmer: vec![],
             count: 1,
             extra_count: 0,
+            label: None,
         },
         KmerCount {
             hash: 2,
             kmer: vec![],
             count: 10,
             extra_count: 0,
+            label: None,
         },
         KmerCount {
             hash: 3,
             kmer: vec![],
             count: 10,
             extra_count: 0,
+            label: None,
         },
         KmerCount {
             hash: 4,
             kmer: vec![],
             count: 9,
             extra_count: 0,
+            label: None,
         },
     ];
     let filtered = filter_abundance(&sketch, Some(9), None);
@@ -393,24 +413,28 @@ fn test_filter_strands() {
             kmer: vec![],
             count: 10,
             extra_count: 1,
+            label: None,
         },
         KmerCount {
             hash: 2,
             kmer: vec![],
             count: 10,
             extra_count: 2,
+            label: None,
         },
         KmerCount {
             hash: 3,
             kmer: vec![],
             count: 10,
             extra_count: 8,
+            label: None,
         },
         KmerCount {
             hash: 4,
             kmer: vec![],
             count: 10,
             extra_count: 9,
+            label: None,
         },
     ];
     let filtered = filter_strands(&sketch, 0.15);
@@ -424,24 +448,28 @@ fn test_filter_strands() {
             kmer: vec![],
             count: 16,
             extra_count: 1,
+            label: None,
         },
         KmerCount {
             hash: 2,
             kmer: vec![],
             count: 16,
             extra_count: 2,
+            label: None,
         },
         KmerCount {
             hash: 3,
             kmer: vec![],
             count: 16,
             extra_count: 8,
+            label: None,
         },
         KmerCount {
             hash: 4,
             kmer: vec![],
             count: 16,
             extra_count: 9,
+            label: None,
         },
     ];
     let filtered = filter_strands(&sketch, 0.15);
