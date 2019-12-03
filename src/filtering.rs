@@ -29,20 +29,36 @@ impl FilterParams {
         sketch.filter_params.abun_filter = match self.abun_filter {
             (Some(l), Some(h)) => (
                 Some(u32::max(l, sketch.filter_params.abun_filter.0.unwrap_or(0))),
-                Some(u32::min(h, sketch.filter_params.abun_filter.1.unwrap_or(u32::max_value())))
+                Some(u32::min(
+                    h,
+                    sketch
+                        .filter_params
+                        .abun_filter
+                        .1
+                        .unwrap_or(u32::max_value()),
+                )),
             ),
             (Some(l), None) => (
                 Some(u32::max(l, sketch.filter_params.abun_filter.0.unwrap_or(0))),
-                None
+                None,
             ),
             (None, Some(h)) => (
                 None,
-                Some(u32::min(h, sketch.filter_params.abun_filter.1.unwrap_or(u32::max_value())))
+                Some(u32::min(
+                    h,
+                    sketch
+                        .filter_params
+                        .abun_filter
+                        .1
+                        .unwrap_or(u32::max_value()),
+                )),
             ),
             (None, None) => (None, None),
         };
-        sketch.filter_params.err_filter = f64::max(sketch.filter_params.err_filter, self.err_filter);
-        sketch.filter_params.strand_filter = f64::max(sketch.filter_params.strand_filter, self.strand_filter);
+        sketch.filter_params.err_filter =
+            f64::max(sketch.filter_params.err_filter, self.err_filter);
+        sketch.filter_params.strand_filter =
+            f64::max(sketch.filter_params.strand_filter, self.strand_filter);
     }
 
     /// Returns the filtered kmer counts.

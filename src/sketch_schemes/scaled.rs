@@ -5,7 +5,7 @@ use std::usize;
 use needletail::{Sequence, SequenceRecord};
 
 use crate::sketch_schemes::hashing::{hash_f, HashedItem, NoHashHasher};
-use crate::sketch_schemes::{ItemHash, KmerCount, SketchScheme};
+use crate::sketch_schemes::{ItemHash, KmerCount, SketchParams, SketchScheme};
 
 #[derive(Clone, Debug)]
 pub struct ScaledSketcher {
@@ -95,6 +95,15 @@ impl SketchScheme for ScaledSketcher {
             results.push(new_item);
         }
         results
+    }
+
+    fn parameters(&self) -> SketchParams {
+        SketchParams::Scaled {
+            kmers_to_sketch: self.size,
+            kmer_length: self.kmer_length,
+            scale: 1. / (u64::max_value() as f64 / self.max_hash as f64),
+            hash_seed: self.seed,
+        }
     }
 }
 

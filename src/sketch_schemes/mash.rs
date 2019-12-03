@@ -5,7 +5,7 @@ use std::usize;
 use needletail::{Sequence, SequenceRecord};
 
 use crate::sketch_schemes::hashing::{hash_f, HashedItem, NoHashHasher};
-use crate::sketch_schemes::{ItemHash, KmerCount, SketchScheme};
+use crate::sketch_schemes::{ItemHash, KmerCount, SketchParams, SketchScheme};
 
 #[derive(Clone, Debug)]
 pub struct MashSketcher {
@@ -96,6 +96,16 @@ impl SketchScheme for MashSketcher {
             results.push(new_item);
         }
         results
+    }
+
+    fn parameters(&self) -> SketchParams {
+        SketchParams::Mash {
+            kmers_to_sketch: self.size,
+            final_size: self.size,
+            no_strict: false,
+            kmer_length: self.kmer_length,
+            hash_seed: self.seed,
+        }
     }
 }
 

@@ -407,7 +407,20 @@ fn parse_mash_files(matches: &ArgMatches) -> Result<Vec<Sketch>> {
         // and then handle the rest of the sketch files
         for filename in filename_iter {
             let extra_sketches = open_sketch_file(filename)?;
-            // FIXME: check extra_sketches are compatible with sketches?
+            // check new sketches are compatible with original file
+            for sketch in &extra_sketches {
+                if let Some((name, v1, v2)) =
+                    sketch_params.check_compatibility(&sketch.sketch_params)
+                {
+                    bail!(
+                        "Sketch {} has {} {}, but working value is {}",
+                        sketch.name,
+                        name,
+                        v2,
+                        v1,
+                    );
+                }
+            }
             sketches.extend(extra_sketches);
             if filters.filter_on == Some(true) {
                 for mut sketch in &mut sketches {
@@ -418,7 +431,6 @@ fn parse_mash_files(matches: &ArgMatches) -> Result<Vec<Sketch>> {
 
         // now handle the sequences
         let extra_sketches = sketch_files(&seq_filenames, &sketch_params, &filters)?;
-        // FIXME: check extra_sketches are compatible with sketches?
         sketches.extend(extra_sketches);
         Ok(sketches)
     } else {

@@ -187,6 +187,8 @@ impl MultiSketch {
     pub fn from_sketches(sketches: &[Sketch]) -> FinchResult<Self> {
         let json_sketches: Vec<JsonSketch> = sketches.iter().map(|x| (*x).clone().into()).collect();
         let sketch_params = SketchParams::from_sketches(&sketches)?;
+        // TODO: the scale isn't actually harmonized between the sketches at
+        // this point; it probably should be?
         let (hash_type, hash_bits, hash_seed, scale) = sketch_params.hash_info();
         Ok(MultiSketch {
             alphabet: "ACGT".to_string(),

@@ -87,7 +87,6 @@ pub fn sketch_stream<'a>(
     // do filtering
     let mut filtered_hashes = filter_params.filter_counts(&hashes);
     sketch_params.process_post_filter(&mut filtered_hashes, name)?;
-    // let filter_stats = filters.to_serialized();
 
     Ok(Sketch {
         name: name.to_string(),
@@ -106,8 +105,6 @@ pub fn open_sketch_file(filename: &str) -> Result<Vec<Sketch>> {
         let mut buf_reader = BufReader::new(file);
         read_mash_file(&mut buf_reader)
     } else if filename.ends_with(FINCH_BIN_EXT) {
-        // FIXME: we need to check all the sketches are concordant in here?
-        // or should we do that on write?
         let mut buf_reader = BufReader::new(file);
         read_finch_file(&mut buf_reader)
     } else if filename.ends_with(FINCH_EXT) || filename.ends_with(".json") {

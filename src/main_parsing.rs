@@ -1,4 +1,4 @@
-use std::mem::size_of;
+use std::mem::{discriminant, size_of};
 use std::str::FromStr;
 
 use clap::{App, Arg, ArgMatches};
@@ -67,7 +67,7 @@ pub fn add_filter_options<'a, 'b>(app: App<'a, 'b>) -> App<'a, 'b> {
          .default_value("0.1"))
     .arg(Arg::with_name("err_filter")
          .long("err-filter")
-         .help("Dynamically determine a minimum coverage threshold for filtering from the kmer count histogram using an assumed error rate percentage")
+         .help("The assumed error rate (as a percentage) used to dynamically determine the minimum coverage threshold from the kmer count histogram. This threshold is then used in place of the min-abun-filter if it's more stringent.")
          .takes_value(true)
          .default_value("1"))
 }
@@ -230,8 +230,13 @@ pub fn update_sketch_params(
     sketch: &Sketch,
     name: &str,
 ) -> Result<()> {
-    // FIXME: check that the sketching type is concordant?
     let new_sketch_params = &sketch.sketch_params;
+
+    // check that the sketching type is the same; we may want to remove
+    // this check at some point?
+    if discriminant(sketch_params) != discriminant(new_sketch_params) {
+        bail!("Sketch types are not the same")
+    }
 
     // if arguments weren't provided use the ones from the multisketch
     match sketch_params {
