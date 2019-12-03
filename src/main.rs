@@ -148,10 +148,9 @@ fn run() -> Result<()> {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("mash_mode")
-                .short("m")
-                .long("mash")
-                .help("Calculate distances using the same algorithms as Mash"),
+            Arg::with_name("old_dist_mode")
+                .long("old-dist")
+                .help("Calculate distances using the old containment-biased Finch mode"),
         );
     dist_command = add_output_options(dist_command);
     dist_command = add_filter_options(dist_command);
@@ -225,7 +224,7 @@ fn run() -> Result<()> {
             generate_sketch_files(matches, file_ext)?;
         }
     } else if let Some(matches) = matches.subcommand_matches("dist") {
-        let mash_mode = matches.is_present("mash_mode");
+        let old_mode = matches.is_present("old_dist_mode");
 
         let max_dist = get_float_arg(matches, "max_distance", 1f64)?;
         let all_sketches = parse_mash_files(matches)?;
@@ -254,7 +253,7 @@ fn run() -> Result<()> {
             query_sketches.push(all_sketches.first().unwrap());
         }
 
-        let distances = calc_sketch_distances(&query_sketches, &all_sketches, mash_mode, max_dist);
+        let distances = calc_sketch_distances(&query_sketches, &all_sketches, old_mode, max_dist);
 
         output_to(
             |writer| {
@@ -431,25 +430,16 @@ fn parse_mash_files(matches: &ArgMatches) -> Result<Vec<Sketch>> {
 fn calc_sketch_distances(
     query_sketches: &[&Sketch],
     ref_sketches: &[Sketch],
-    mash_mode: bool,
+    old_mode: bool,
     max_distance: f64,
 ) -> Vec<SketchDistance> {
     let mut distances = Vec::new();
     for ref_sketch in ref_sketches {
-        let rsketch = &ref_sketch.hashes;
         for query_sketch in query_sketches {
             if query_sketch == &ref_sketch {
                 continue;
             }
-            let qsketch = &query_sketch.hashes;
-            let distance = distance(
-                &qsketch,
-                &rsketch,
-                &query_sketch.name,
-                &ref_sketch.name,
-                mash_mode,
-            )
-            .unwrap();
+            let distance = distance(&query_sketch, &ref_sketch, old_mode).unwrap();
             if distance.mash_distance <= max_distance {
                 distances.push(distance);
             }

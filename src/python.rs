@@ -9,7 +9,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyBytes, PyList, PyTuple, PyType};
 use pyo3::{create_exception, wrap_pyfunction};
 
-use crate::distance::{best_distance, distance, distance_scaled, minmer_matrix};
+use crate::distance::{distance, minmer_matrix};
 use crate::filtering::FilterParams;
 use crate::serialization::{write_finch_file, Sketch as SType};
 use crate::sketch_schemes::{KmerCount, SketchParams};
@@ -136,10 +136,7 @@ impl Multisketch {
         // containment as our metric
         let mut max_containment: f64 = 0.;
         for (ix, sketch) in self.sketches.iter().enumerate() {
-            // TODO: use best_distance here and elsewhere?
-            let dist =
-                distance_scaled(&sketch.hashes, &query.s.hashes, &sketch.name, &query.s.name)
-                    .map_err(to_pyerr)?;
+            let dist = distance(&query.s, &sketch, false).map_err(to_pyerr)?;
             if dist.containment > max_containment {
                 max_containment = dist.containment;
                 best_sketch = ix;
@@ -150,15 +147,14 @@ impl Multisketch {
 
     /// filter_to_matches(sketch: Sketch, threshold: f64)
     ///
-    /// Removes sketches that don't match the provided sketch within some
+    /// Remove sketches that don't match the provided sketch within some
     /// threshold. The threshold is a containment threshold so higher values
     /// are more stringent.
     pub fn filter_to_matches(&mut self, query: &Sketch, threshold: f64) -> PyResult<()> {
         let mut filtered_sketches = Vec::new();
         for sketch in &self.sketches {
             // TODO: use best_distance here and elsewhere?
-            let dist = distance_scaled(&sketch.hashes, &query.s.hashes, &sketch.name, &query.s.name)
-                .map_err(to_pyerr)?;
+            let dist = distance(&query.s, &sketch, false).map_err(to_pyerr)?;
             if dist.containment >= threshold {
                 filtered_sketches.push(sketch.clone());
             }
@@ -445,22 +441,14 @@ impl Sketch {
         Ok(merge_sketches(&mut self.s, &sketch.s, size).map_err(to_pyerr)?)
     }
 
-    /// compare(sketch, mash_mode=False)
+    /// compare(sketch, old_mode=False)
     ///
-    /// Calculates the containment within and jaccard similarity to another sketch.
-    #[args(mash_mode = true)]
-    pub fn compare(&self, sketch: &Sketch, mash_mode: bool) -> PyResult<(f64, f64)> {
-        let dist =
-            distance(&self.s.hashes, &sketch.s.hashes, &"", &"", mash_mode).map_err(to_pyerr)?;
-
-        Ok((dist.containment, dist.jaccard))
-    }
-
-    /// compare_scaled(sketch)
-    ///
-    /// Calculates the containment within and jaccard similarity to another scaled sketch.
-    pub fn compare_scaled(&self, sketch: &Sketch) -> PyResult<(f64, f64)> {
-        let dist = distance_scaled(&self.s.hashes, &sketch.s.hashes, &"", &"").map_err(to_pyerr)?;
+    /// Calculate the containment within and jaccard similarity to another
+    /// sketch. If old_mode is set, consider the entirety of the reference
+    /// sketch (self) when computing containment.
+    #[args(old_mode = false)]
+    pub fn compare(&self, sketch: &Sketch, old_mode: bool) -> PyResult<(f64, f64)> {
+        let dist = distance(&sketch.s, &self.s, old_mode).map_err(to_pyerr)?;
 
         Ok((dist.containment, dist.jaccard))
     }

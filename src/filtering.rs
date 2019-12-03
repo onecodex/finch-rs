@@ -22,9 +22,27 @@ impl FilterParams {
         // my own parameters
         let mut filters_copy = self.clone();
         filters_copy.filter_counts(&sketch.hashes);
-        // FIXME: we need to update any parameters that are stricter than the
-        // ones in the existing `sketch.filter_params` not blanket overwrite
-        sketch.filter_params = filters_copy;
+        // we need to update any parameters that are stricter than the
+        // ones in the existing `sketch.filter_params` to reflect additional
+        // filtering (if they were already more strict leave them be)
+        sketch.filter_params.filter_on = self.filter_on;
+        sketch.filter_params.abun_filter = match self.abun_filter {
+            (Some(l), Some(h)) => (
+                Some(u32::max(l, sketch.filter_params.abun_filter.0.unwrap_or(0))),
+                Some(u32::min(h, sketch.filter_params.abun_filter.1.unwrap_or(u32::max_value())))
+            ),
+            (Some(l), None) => (
+                Some(u32::max(l, sketch.filter_params.abun_filter.0.unwrap_or(0))),
+                None
+            ),
+            (None, Some(h)) => (
+                None,
+                Some(u32::min(h, sketch.filter_params.abun_filter.1.unwrap_or(u32::max_value())))
+            ),
+            (None, None) => (None, None),
+        };
+        sketch.filter_params.err_filter = f64::max(sketch.filter_params.err_filter, self.err_filter);
+        sketch.filter_params.strand_filter = f64::max(sketch.filter_params.strand_filter, self.strand_filter);
     }
 
     /// Returns the filtered kmer counts.
