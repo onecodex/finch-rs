@@ -304,7 +304,8 @@ pub fn update_sketch_params(
             if let Some(new_scale_num) = new_scale {
                 if matches.occurrences_of("scale") == 0 {
                     *scale = new_scale_num;
-                } else if *scale != new_scale_num {
+                } else if (*scale - new_scale_num).abs() < std::f64::EPSILON {
+                    // TODO: maybe this should have a slightly larger delta?
                     bail!(
                         "Specified scale {} does not match {} from sketch {}",
                         scale,

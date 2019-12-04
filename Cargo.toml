@@ -37,3 +37,7 @@ python = ["numpy", "pyo3"]
 
 [lib]
 crate-type=["cdylib", "rlib"]
+
+[package.metadata.maturin]
+maintainer = "One Codex"
+classifier = ["Intended Audience :: Science/Research", "License :: OSI Approved :: MIT License", "Topic :: Scientific/Engineering :: Bio-Informatics"]

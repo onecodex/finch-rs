@@ -6,3 +6,5 @@ Cargo.lock
 *.so
 *.egg-info/
 venv/
+dist/
+__pycache__/

@@ -144,8 +144,8 @@ Distances and containments will only be computed from one or more queries to a c
 This behavior can be manually overriden and other sketches can be used as references by passing `--queries <sketch_1>,<sketch_2`.
 Additionally, passing the `--pairwise` option will calculate the distances between all sketches and each other.
 
-Due to different counting algoritms and stopping criteria, distances may be slightly different from the calculation in the original Mash program.
-If you'd like identical distances, the `--mash` flag will use their original counting and distance algorithm (differences relate to where to stop in the minmer set comparisons).
+Due to different counting algoritms and stopping criteria, distances may be slightly different from the calculation in the original Mash program and older version of finch.
+Passing the `-old-dist` flag will revert to the older version of Finch's calculation; support for Mash's exact distance calculation has been dropped as of version 0.3.
 
 ### `finch hist` ###
 
@@ -176,16 +176,20 @@ Notes:
 
 Optional Python bindings are in the `src/python.rs` file and can be built into a python library with:
 ```bash
-rustup default nightly`
-# optionally: source venv/bin/activate
-./setup.py develop  # or build, etc
+rustup default nightly
+pip install maturin
+maturin install --cargo-extra-args="--features=python" --release --strip
+# or maturin develop, etc
+# to cross-compile linux wheels:
+docker run --rm -v $(pwd):/io konstin2/maturin:master build --cargo-extra-args="--features=python" --release --strip
 ```
 
 Then, e.g. to calculate the similarities between two E. coli:
 ```python
-from finch import sketch_files
-ms = sketch_files(['WIS_EcoB_v2.fas', 'WIS_Eco10798_DRAFTv1.fas'], 1000, 1000, 21, False, 0)
-cont, jacc = ms.sketches[0].compare(ms.sketches[1])
+from finch import sketch_file
+sketch_one = sketch_file('WIS_EcoB_v2.fas')
+sketch_two = sketch_file('WIS_Eco10798_DRAFTv1.fas')
+cont, jacc = sketch_one.compare(sketch_two)
 ```
 
 ## Contributions ##

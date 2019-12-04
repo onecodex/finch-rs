@@ -101,8 +101,9 @@ fn merge_sketches(sketch: &mut SType, other: &SType, size: Option<usize>) -> Fin
 }
 
 #[pyclass]
-/// A Multisketch is a collection of Sketchs with information about their generation parameters
-/// (to make sure they're consistant for distance calculation).
+/// A Multisketch is a collection of Sketchs with information about their 
+/// generation parameters (to make sure they're consistant for distance
+/// calculation).
 pub struct Multisketch {
     pub sketches: Vec<SType>,
 }
@@ -112,8 +113,8 @@ impl Multisketch {
     #[classmethod]
     /// open(filename: str)
     ///
-    /// Takes a file path to a `.sk`, `.bsk` or a `.mash` file and returns the Multisketch
-    /// contained within that file.
+    /// Takes a file path to a `.sk`, `.bsk` or a `.mash` file and returns the
+    /// Multisketch contained within that file.
     pub fn open(_cls: &PyType, filename: &str) -> PyResult<Multisketch> {
         Ok(Multisketch {
             sketches: open_sketch_file(filename).map_err(to_pyerr)?,
@@ -152,7 +153,7 @@ impl Multisketch {
         Ok(())
     }
 
-    /// best_match(query: Sketch) -> (usize, Sketch)
+    /// best_match(self, query: Sketch) -> (usize, Sketch)
     ///
     /// Return the index of and the closest sketch to the query Sketch.
     /// Closest is defined by the containment so this is most appropriate
@@ -174,7 +175,7 @@ impl Multisketch {
         Ok((best_sketch, self.sketches[best_sketch].clone().into()))
     }
 
-    /// filter_to_matches(sketch: Sketch, threshold: f64)
+    /// filter_to_matches(self, sketch: Sketch, threshold: f64)
     ///
     /// Remove sketches that don't match the provided sketch within some
     /// threshold. The threshold is a containment threshold so higher values
@@ -192,7 +193,7 @@ impl Multisketch {
         Ok(())
     }
 
-    /// filter_to_names(names: List[str])
+    /// filter_to_names(self, names: List[str])
     ///
     /// Mutably remove any sketches without names in the provided list.
     /// Convenience method to allow faster preprocessing with lower memory
@@ -468,7 +469,7 @@ impl Sketch {
 
     // TODO: clip to n kmers/hashes method
 
-    /// merge(sketch, size)
+    /// merge(self, sketch: Sketch, size: int)
     ///
     /// Merge the second sketch into this one. If size is specified, use
     /// that as the new sketch's size. If scale is specified, merge the
@@ -479,11 +480,12 @@ impl Sketch {
         Ok(merge_sketches(&mut self.s, &sketch.s, size).map_err(to_pyerr)?)
     }
 
-    /// compare(sketch, old_mode=False)
+    /// compare(self, sketch: Sketch, old_mode: bool = False) -> (float, float)
     ///
     /// Calculate the containment within and jaccard similarity to another
     /// sketch. If old_mode is set, consider the entirety of the reference
-    /// sketch (self) when computing containment.
+    /// sketch (self) when computing containment as finch versions v0.2 and
+    /// older did; for most uses you probably don't want this.
     #[args(old_mode = false)]
     pub fn compare(&self, sketch: &Sketch, old_mode: bool) -> PyResult<(f64, f64)> {
         let dist = distance(&sketch.s, &self.s, old_mode).map_err(to_pyerr)?;
@@ -491,7 +493,7 @@ impl Sketch {
         Ok((dist.containment, dist.jaccard))
     }
 
-    /// compare_counts(sketch)
+    /// compare_counts(self, sketch: Sketch) -> (int, int, int, int, int, float, float, float)
     ///
     /// Experimental.
     ///
@@ -563,7 +565,7 @@ impl Sketch {
         ))
     }
 
-    /// compare_matrix(*sketches)
+    /// compare_matrix(self, *sketches: Sketch)
     ///
     /// Experimental.
     ///
@@ -615,7 +617,7 @@ impl Sketch {
         Ok(())
     }
 
-    /// copy()
+    /// copy(self)
     ///
     /// Create a copy of the current Sketch.
     pub fn copy(&self) -> PyResult<Sketch> {
@@ -651,7 +653,15 @@ impl From<SType> for Sketch {
 // add the kmers; this might be better done with a new "Sketch scheme" that
 // allows non-nucleic acid bases?
 
-/// sketch_file(filename, /, n_hashes, final_size, kmer_length, filter, seed) -> Sketch
+/// sketch_file(
+///     filename: str,
+///     /,
+///     n_hashes: int,
+///     final_size: int,
+///     kmer_length: int,
+///     filter: bool,
+///     seed: int
+/// ) -> Sketch
 /// ---
 ///
 /// From the FASTA or FASTQ file path, create a Sketch.

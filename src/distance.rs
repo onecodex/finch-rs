@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 use ndarray::Array2;
 
 use crate::serialization::{Sketch, SketchDistance};
@@ -55,7 +57,7 @@ pub fn raw_distance(
     ref_hashes: &[KmerCount],
     scale: f64,
 ) -> (f64, f64, u64, u64) {
-    if query_hashes.len() == 0 || ref_hashes.len() == 0 {
+    if query_hashes.is_empty() || ref_hashes.is_empty() {
         return (0., 0., 0, 0);
     }
 
@@ -63,25 +65,27 @@ pub fn raw_distance(
     let mut j: usize = 0;
     let mut common: u64 = 0;
     loop {
-        if query_hashes[i].hash < ref_hashes[j].hash {
-            if i + 1 == query_hashes.len() {
-                break;
+        match query_hashes[i].hash.cmp(&ref_hashes[j].hash) {
+            Ordering::Less => {
+                if i + 1 == query_hashes.len() {
+                    break;
+                }
+                i += 1;
             }
-            i += 1;
-        } else if ref_hashes[j].hash < query_hashes[i].hash {
-            if j + 1 == ref_hashes.len() {
-                break;
+            Ordering::Greater => {
+                if j + 1 == ref_hashes.len() {
+                    break;
+                }
+                j += 1;
             }
-            j += 1;
-        } else {
-            // we could update both total and common here, but since the sum
-            // is the same we just push that to the end
-            common += 1;
-            if i + 1 == query_hashes.len() || j + 1 == ref_hashes.len() {
-                break;
+            Ordering::Equal => {
+                common += 1;
+                if i + 1 == query_hashes.len() || j + 1 == ref_hashes.len() {
+                    break;
+                }
+                i += 1;
+                j += 1;
             }
-            i += 1;
-            j += 1;
         }
     }
 
@@ -111,13 +115,12 @@ pub fn raw_distance(
     if !(i == 0 && query_hashes[0].hash > ref_hashes[ref_hashes.len() - 1].hash) {
         i += 1;
     }
-    let containment: f64;
-    if !(j == 0 && ref_hashes[0].hash > query_hashes[query_hashes.len() - 1].hash) {
+    let containment = if !(j == 0 && ref_hashes[0].hash > query_hashes[query_hashes.len() - 1].hash) {
         j += 1;
-        containment = common as f64 / j as f64;
+        common as f64 / j as f64
     } else {
-        containment = 0.;
-    }
+        0.
+    };
     let total = i as u64 + j as u64 - common;
     let jaccard: f64 = common as f64 / total as f64;
 
