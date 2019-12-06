@@ -37,6 +37,7 @@ python = ["numpy", "pyo3"]
 
 [lib]
 crate-type=["cdylib", "rlib"]
+name = "finch"
 
 [package.metadata.maturin]
 maintainer = "One Codex"

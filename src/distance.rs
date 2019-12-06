@@ -115,7 +115,8 @@ pub fn raw_distance(
     if !(i == 0 && query_hashes[0].hash > ref_hashes[ref_hashes.len() - 1].hash) {
         i += 1;
     }
-    let containment = if !(j == 0 && ref_hashes[0].hash > query_hashes[query_hashes.len() - 1].hash) {
+    let containment = if !(j == 0 && ref_hashes[0].hash > query_hashes[query_hashes.len() - 1].hash)
+    {
         j += 1;
         common as f64 / j as f64
     } else {

@@ -101,7 +101,7 @@ fn merge_sketches(sketch: &mut SType, other: &SType, size: Option<usize>) -> Fin
 }
 
 #[pyclass]
-/// A Multisketch is a collection of Sketchs with information about their 
+/// A Multisketch is a collection of Sketchs with information about their
 /// generation parameters (to make sure they're consistant for distance
 /// calculation).
 pub struct Multisketch {
