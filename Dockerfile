@@ -10,8 +10,7 @@ ADD --chown=rust:rust Cargo.toml /home/rust/finch/Cargo.toml
 ADD --chown=rust:rust rust-toolchain /home/rust/finch/rust-toolchain
 
 RUN cd /home/rust/finch \
-    && rustup target add x86_64-unknown-linux-musl \
-    && RUSTFLAGS="-C target-cpu=native" cargo build --release
+    && cargo +stable build --release --target x86_64-unknown-linux-musl
 
 # MAIN CONTAINER
 FROM python:3.7-slim-stretch
