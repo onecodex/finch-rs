@@ -7,7 +7,6 @@ FROM ekidd/rust-musl-builder:stable AS builder
 RUN mkdir /home/rust/finch
 ADD --chown=rust:rust src/ /home/rust/finch/src/
 ADD --chown=rust:rust Cargo.toml /home/rust/finch/Cargo.toml
-ADD --chown=rust:rust rust-toolchain /home/rust/finch/rust-toolchain
 
 RUN cd /home/rust/finch \
     && cargo +stable build --release --target x86_64-unknown-linux-musl
