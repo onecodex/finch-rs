@@ -8,3 +8,4 @@ Cargo.lock
 venv/
 dist/
 __pycache__/
+.idea/
