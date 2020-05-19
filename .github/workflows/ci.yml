@@ -21,9 +21,7 @@ jobs:
         run:  rustc --version; cargo --version;
 
       - name: Install python headers
-        run: |
-        sudo apt-get update
-        sudo apt-get install python3-dev python3-pip
+        run: sudo apt-get update && sudo apt-get install python3-dev python3-pip
 
       - name: Install maturin
         run: pip install maturin
@@ -32,6 +30,9 @@ jobs:
         run: maturin install --cargo-extra-args="--features=python" --release --strip
 
   tests:
+    strategy:
+      matrix:
+        rust-version: [1.38.0, stable]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -40,7 +41,7 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: 1.38.0
+          toolchain: ${{ matrix.rust-version }}
           override: true
 
       - name: version info
