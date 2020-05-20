@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  tests:
+  python-compile:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -15,7 +15,36 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: 1.35.0
+          toolchain: nightly
+          override: true
+      - name: version info
+        run:  rustc --version; cargo --version;
+
+      - name: Install python headers
+        run: sudo apt-get update && sudo apt-get install python3-dev python3-pip
+
+      - name: Install maturin
+        run: | 
+          pip3 install --user maturin
+          pip3 show maturin
+
+
+      - name: compile finch with python bindings
+        run: ~/.local/bin/maturin build --cargo-extra-args="--features=python" --release --strip --manylinux=off
+
+  tests:
+    strategy:
+      matrix:
+        rust-version: [1.38.0, stable]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ matrix.rust-version }}
           override: true
 
       - name: version info

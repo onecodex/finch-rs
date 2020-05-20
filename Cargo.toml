@@ -17,7 +17,7 @@ clap = "2.33.0"
 failure = "0.1.2"
 memmap = "0.7.0"
 murmurhash3 = "0.0.5"
-ndarray = "0.12"
+ndarray = "0.13"
 needletail = "0.3.1"
 numpy = { version = "0.7.0", optional = true }
 pyo3 = { version = "0.8.2", optional = true, features=["extension-module"] }
