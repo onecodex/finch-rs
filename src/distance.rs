@@ -57,32 +57,15 @@ pub fn raw_distance(
     ref_hashes: &[KmerCount],
     scale: f64,
 ) -> (f64, f64, u64, u64) {
-    if query_hashes.is_empty() || ref_hashes.is_empty() {
-        return (0., 0., 0, 0);
-    }
-
     let mut i: usize = 0;
     let mut j: usize = 0;
     let mut common: u64 = 0;
-    loop {
-        match query_hashes[i].hash.cmp(&ref_hashes[j].hash) {
-            Ordering::Less => {
-                if i + 1 == query_hashes.len() {
-                    break;
-                }
-                i += 1;
-            }
-            Ordering::Greater => {
-                if j + 1 == ref_hashes.len() {
-                    break;
-                }
-                j += 1;
-            }
+    while let (Some(query), Some(refer)) = (query_hashes.get(i), ref_hashes.get(j)) {
+        match query.hash.cmp(&refer.hash) {
+            Ordering::Less => i += 1,
+            Ordering::Greater => j += 1,
             Ordering::Equal => {
                 common += 1;
-                if i + 1 == query_hashes.len() || j + 1 == ref_hashes.len() {
-                    break;
-                }
                 i += 1;
                 j += 1;
             }
@@ -92,38 +75,30 @@ pub fn raw_distance(
     // at this point we've exhausted one of the two sketches, but we may have
     // more counts in the other to compare if these were scaled sketches
     if scale > 0. {
-        let max_hash = u64::max_value() / (1. / scale) as u64;
-        while i + 1 < query_hashes.len() {
-            if query_hashes[i + 1].hash < max_hash {
-                i += 1;
-            } else {
-                break;
-            }
+        let max_hash = u64::max_value() / scale.recip() as u64;
+        while query_hashes
+            .get(i)
+            .map(|kmer_count| kmer_count.hash < max_hash)
+            .unwrap_or(false)
+        {
+            i += 1;
         }
-        while j + 1 < ref_hashes.len() {
-            if ref_hashes[j + 1].hash < max_hash {
-                j += 1;
-            } else {
-                break;
-            }
+        while ref_hashes
+            .get(j)
+            .map(|kmer_count| kmer_count.hash < max_hash)
+            .unwrap_or(false)
+        {
+            j += 1;
         }
     }
 
-    // note that i and j are both 1 short at this point since they're array
-    // indices instead of counts so we adjust them both upwards by 1 (unless
-    // all of one sketch is greater than the largest hash in the other)
-    if !(i == 0 && query_hashes[0].hash > ref_hashes[ref_hashes.len() - 1].hash) {
-        i += 1;
-    }
-    let containment = if !(j == 0 && ref_hashes[0].hash > query_hashes[query_hashes.len() - 1].hash)
-    {
-        j += 1;
-        common as f64 / j as f64
+    let containment = if j == 0 { 0. } else { common as f64 / j as f64 };
+    let total = i as u64 - common + j as u64;
+    let jaccard: f64 = if total == 0 {
+        1.
     } else {
-        0.
+        common as f64 / total as f64
     };
-    let total = i as u64 + j as u64 - common;
-    let jaccard: f64 = common as f64 / total as f64;
 
     (containment, jaccard, common, total)
 }
@@ -131,6 +106,7 @@ pub fn raw_distance(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
 
     fn kc(arr: &[u64]) -> Vec<KmerCount> {
         arr.iter()
@@ -142,6 +118,15 @@ mod tests {
                 label: None,
             })
             .collect()
+    }
+
+    proptest! {
+        #[test]
+        fn distance_commutes(query_hashes: Vec<u64>, ref_hashes: Vec<u64>) {
+            let lhs = kc(&query_hashes);
+            let rhs = kc(&ref_hashes);
+            prop_assert_eq!(raw_distance(&lhs, &rhs, 0.), raw_distance(&rhs, &lhs, 0.));
+        }
     }
 
     #[test]
@@ -163,6 +148,24 @@ mod tests {
         assert_eq!(jac, 0. / 2.);
         assert_eq!(com, 0);
         assert_eq!(total, 2);
+
+        let (cont, jac, com, total) = raw_distance(&kc(&[2, 0]), &kc(&[1]), 0.);
+        assert_eq!(cont, 0.);
+        assert_eq!(jac, 0.);
+        assert_eq!(com, 0);
+        assert_eq!(total, 1);
+
+        let (cont, jac, com, total) = raw_distance(&kc(&[]), &kc(&[]), 0.);
+        assert_eq!(cont, 0.);
+        assert_eq!(jac, 1.);
+        assert_eq!(com, 0);
+        assert_eq!(total, 0);
+
+        let (cont, jac, com, total) = raw_distance(&kc(&[]), &kc(&[5]), 0.);
+        assert_eq!(cont, 0.);
+        assert_eq!(jac, 1.);
+        assert_eq!(com, 0);
+        assert_eq!(total, 0);
     }
 
     #[test]
