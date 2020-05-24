@@ -172,17 +172,8 @@ mod tests {
         assert_eq!(com, 0);
         assert_eq!(total, 2);
 
-        let (cont, jac, com, total) = raw_distance(&kc(&[]), &kc(&[]), 0.);
-        assert_eq!(cont, 0.);
-        assert_eq!(jac, 1.);
-        assert_eq!(com, 0);
-        assert_eq!(total, 0);
-
-        let (cont, jac, com, total) = raw_distance(&kc(&[]), &kc(&[5]), 0.);
-        assert_eq!(cont, 0.);
-        assert_eq!(jac, 1.);
-        assert_eq!(com, 0);
-        assert_eq!(total, 0);
+        assert_eq!((0., 1., 0, 0), raw_distance(&kc(&[]), &kc(&[]), 0.));
+        assert_eq!((0., 1., 0, 0), raw_distance(&kc(&[]), &kc(&[5]), 0.));
     }
 
     #[test]
