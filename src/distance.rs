@@ -45,18 +45,39 @@ pub fn distance(
     })
 }
 
-/// This computes the set statistics between two sets of hashes.
+/// Estimates set statistics based on two slices of `KmerCount` sorted by hash,
+/// ignoring hashes past a certain point (details below).
 ///
-/// It stops once either one of the sets has "run out" of hashes, i.e. at the
-/// smallest max hash of the two sets, or when it's reached a "scale" boundary
-/// if the sets were sketched in a scaled fashion. In general this is a better
-/// approximation of the true document distance when either the two
-/// original documents were of different sizes or of unknown sizes.
+/// Returns a tuple of the form (containment,
+/// [jaccard index](https://en.wikipedia.org/wiki/Jaccard_index),
+/// size of [intersection](https://en.wikipedia.org/wiki/Intersection_(set_theory)),
+/// size of [union](https://en.wikipedia.org/wiki/Union_(set_theory))).
+///
+/// Ignores hashes that are greater than `scale` * the maximum possible hash
+/// (i.e. `u64::max_value()`). A scale of `0_f64` indicates to not ignore
+/// hashes for this reason. Additionally ignores a slice's hashes if they are
+/// greater than the other slice's maximum hash; this method better
+/// approximates the document distance when the documents are of different
+/// or of unknown sizes.
+///
+/// If the `KmerCount` slice arguments are not sorted by hash, the values of
+/// the returned set statistics are unspecified.
 pub fn raw_distance(
     query_hashes: &[KmerCount],
     ref_hashes: &[KmerCount],
     scale: f64,
 ) -> (f64, f64, u64, u64) {
+    fn kmers_are_sorted(kmer_counts: &[KmerCount]) -> bool {
+        for slice in kmer_counts.windows(2) {
+            if slice[0].hash > slice[1].hash {
+                return false;
+            }
+        }
+        true
+    }
+    debug_assert!(kmers_are_sorted(query_hashes));
+    debug_assert!(kmers_are_sorted(ref_hashes));
+
     let mut i: usize = 0;
     let mut j: usize = 0;
     let mut common: u64 = 0;
@@ -122,7 +143,9 @@ mod tests {
 
     proptest! {
         #[test]
-        fn distance_commutes(query_hashes: Vec<u64>, ref_hashes: Vec<u64>) {
+        fn test_raw_distance_commutes(mut query_hashes: Vec<u64>, mut ref_hashes: Vec<u64>) {
+            query_hashes.sort();
+            ref_hashes.sort();
             let lhs = kc(&query_hashes);
             let rhs = kc(&ref_hashes);
             prop_assert_eq!(raw_distance(&lhs, &rhs, 0.), raw_distance(&rhs, &lhs, 0.));
