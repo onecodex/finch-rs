@@ -45,44 +45,48 @@ pub fn distance(
     })
 }
 
-/// This computes the set statistics between two sets of hashes.
+/// Estimates set statistics based on two slices of `KmerCount` sorted by hash,
+/// ignoring hashes past a certain point (details below).
 ///
-/// It stops once either one of the sets has "run out" of hashes, i.e. at the
-/// smallest max hash of the two sets, or when it's reached a "scale" boundary
-/// if the sets were sketched in a scaled fashion. In general this is a better
-/// approximation of the true document distance when either the two
-/// original documents were of different sizes or of unknown sizes.
+/// Returns a tuple of the form (containment,
+/// [jaccard index](https://en.wikipedia.org/wiki/Jaccard_index),
+/// size of [intersection](https://en.wikipedia.org/wiki/Intersection_(set_theory)),
+/// size of [union](https://en.wikipedia.org/wiki/Union_(set_theory))).
+///
+/// Ignores hashes that are greater than `scale` * the maximum possible hash
+/// (i.e. `u64::max_value()`). A scale of `0_f64` indicates to not ignore
+/// hashes for this reason. Additionally ignores a slice's hashes if they are
+/// greater than the other slice's maximum hash; this method better
+/// approximates the document distance when the documents are of different
+/// or of unknown sizes.
+///
+/// If the `KmerCount` slice arguments are not sorted by hash, the values of
+/// the returned set statistics are unspecified.
 pub fn raw_distance(
     query_hashes: &[KmerCount],
     ref_hashes: &[KmerCount],
     scale: f64,
 ) -> (f64, f64, u64, u64) {
-    if query_hashes.is_empty() || ref_hashes.is_empty() {
-        return (0., 0., 0, 0);
+    fn kmers_are_sorted(kmer_counts: &[KmerCount]) -> bool {
+        for slice in kmer_counts.windows(2) {
+            if slice[0].hash > slice[1].hash {
+                return false;
+            }
+        }
+        true
     }
+    debug_assert!(kmers_are_sorted(query_hashes));
+    debug_assert!(kmers_are_sorted(ref_hashes));
 
     let mut i: usize = 0;
     let mut j: usize = 0;
     let mut common: u64 = 0;
-    loop {
-        match query_hashes[i].hash.cmp(&ref_hashes[j].hash) {
-            Ordering::Less => {
-                if i + 1 == query_hashes.len() {
-                    break;
-                }
-                i += 1;
-            }
-            Ordering::Greater => {
-                if j + 1 == ref_hashes.len() {
-                    break;
-                }
-                j += 1;
-            }
+    while let (Some(query), Some(refer)) = (query_hashes.get(i), ref_hashes.get(j)) {
+        match query.hash.cmp(&refer.hash) {
+            Ordering::Less => i += 1,
+            Ordering::Greater => j += 1,
             Ordering::Equal => {
                 common += 1;
-                if i + 1 == query_hashes.len() || j + 1 == ref_hashes.len() {
-                    break;
-                }
                 i += 1;
                 j += 1;
             }
@@ -92,38 +96,30 @@ pub fn raw_distance(
     // at this point we've exhausted one of the two sketches, but we may have
     // more counts in the other to compare if these were scaled sketches
     if scale > 0. {
-        let max_hash = u64::max_value() / (1. / scale) as u64;
-        while i + 1 < query_hashes.len() {
-            if query_hashes[i + 1].hash < max_hash {
-                i += 1;
-            } else {
-                break;
-            }
+        let max_hash = u64::max_value() / scale.recip() as u64;
+        while query_hashes
+            .get(i)
+            .map(|kmer_count| kmer_count.hash < max_hash)
+            .unwrap_or(false)
+        {
+            i += 1;
         }
-        while j + 1 < ref_hashes.len() {
-            if ref_hashes[j + 1].hash < max_hash {
-                j += 1;
-            } else {
-                break;
-            }
+        while ref_hashes
+            .get(j)
+            .map(|kmer_count| kmer_count.hash < max_hash)
+            .unwrap_or(false)
+        {
+            j += 1;
         }
     }
 
-    // note that i and j are both 1 short at this point since they're array
-    // indices instead of counts so we adjust them both upwards by 1 (unless
-    // all of one sketch is greater than the largest hash in the other)
-    if !(i == 0 && query_hashes[0].hash > ref_hashes[ref_hashes.len() - 1].hash) {
-        i += 1;
-    }
-    let containment = if !(j == 0 && ref_hashes[0].hash > query_hashes[query_hashes.len() - 1].hash)
-    {
-        j += 1;
-        common as f64 / j as f64
+    let containment = if j == 0 { 0. } else { common as f64 / j as f64 };
+    let total = i as u64 - common + j as u64;
+    let jaccard: f64 = if total == 0 {
+        1.
     } else {
-        0.
+        common as f64 / total as f64
     };
-    let total = i as u64 + j as u64 - common;
-    let jaccard: f64 = common as f64 / total as f64;
 
     (containment, jaccard, common, total)
 }
@@ -131,6 +127,7 @@ pub fn raw_distance(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
 
     fn kc(arr: &[u64]) -> Vec<KmerCount> {
         arr.iter()
@@ -142,6 +139,17 @@ mod tests {
                 label: None,
             })
             .collect()
+    }
+
+    proptest! {
+        #[test]
+        fn test_raw_distance_commutes(mut query_hashes: Vec<u64>, mut ref_hashes: Vec<u64>) {
+            query_hashes.sort();
+            ref_hashes.sort();
+            let lhs = kc(&query_hashes);
+            let rhs = kc(&ref_hashes);
+            prop_assert_eq!(raw_distance(&lhs, &rhs, 0.), raw_distance(&rhs, &lhs, 0.));
+        }
     }
 
     #[test]
@@ -163,6 +171,9 @@ mod tests {
         assert_eq!(jac, 0. / 2.);
         assert_eq!(com, 0);
         assert_eq!(total, 2);
+
+        assert_eq!((0., 1., 0, 0), raw_distance(&kc(&[]), &kc(&[]), 0.));
+        assert_eq!((0., 1., 0, 0), raw_distance(&kc(&[]), &kc(&[5]), 0.));
     }
 
     #[test]
