@@ -2,6 +2,7 @@
 
 ![CI](https://github.com/onecodex/finch-rs/workflows/CI/badge.svg)
 [![DOI](http://joss.theoj.org/papers/10.21105/joss.00505/status.svg)](https://doi.org/10.21105/joss.00505)
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fonecodex%2Ffinch-rs.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Fonecodex%2Ffinch-rs?ref=badge_shield)
 
 Finch is an implementation of min-wise independent permutation locality sensitive hashing ("MinHashing") for genomic data.
 This repository provides a library and command-line interface that reimplements much of One Codex's [existing internal clustering/sequence search tool](http://blog.onecodex.com/2016/02/11/clustering-and-basespace/) (and adds new features/extensions!) in [Rust](https://www.rust-lang.org/en-US/).
@@ -197,3 +198,7 @@ cont, jacc = sketch_one.compare(sketch_two)
 Problems or suggestions for improvement can be reported through GitHub issues.
 We are happy to accept and/or mentor any additions or fixes (which are best submitted as pull requests).
 For our code of conduct, please see `CODE_OF_CONDUCT.md`.
+
+
+## License
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fonecodex%2Ffinch-rs.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Fonecodex%2Ffinch-rs?ref=badge_large)
