@@ -22,7 +22,6 @@ macro_rules! py_try {
     };
 }
 
-
 fn merge_sketches(sketch: &mut SketchRs, other: &SketchRs, size: Option<usize>) -> FinchResult<()> {
     // update my parameters from the remote's
     sketch.seq_length += other.seq_length;

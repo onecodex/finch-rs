@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  python-compile:
+  python-bindings:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -15,27 +15,39 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: nightly
+          toolchain: stable
           override: true
+
       - name: version info
         run:  rustc --version; cargo --version;
 
       - name: Install python headers
-        run: sudo apt-get update && sudo apt-get install python3-dev python3-pip
+        run: sudo apt-get update && sudo apt-get install python3-dev python3-pip python3-venv
 
       - name: Install maturin
-        run: | 
-          pip3 install --user maturin
+        run: |
+          python3 -m venv venv
+          . venv/bin/activate
+          pip3 install toml
+          pip3 install maturin
           pip3 show maturin
-
-
-      - name: compile finch with python bindings
-        run: ~/.local/bin/maturin build --cargo-extra-args="--features=python" --release --strip --manylinux=off
+      - name: add library to venv
+        run: |
+          . venv/bin/activate
+          maturin develop --cargo-extra-args="--features=python"
+#      - name: Run the python tests
+#        run: |
+#          . venv/bin/activate
+#          python test_python.py
+      - name: compile taxonomy with python bindings
+        run: |
+          . venv/bin/activate
+          maturin build --cargo-extra-args="--features=python" --release --strip --manylinux=off
 
   tests:
     strategy:
       matrix:
-        rust-version: [1.38.0, stable]
+        rust-version: [1.43.0, stable]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
