@@ -4,7 +4,7 @@ pub mod mash;
 pub mod scaled;
 
 use failure::bail;
-use needletail::SequenceRecord;
+use needletail::parser::SequenceRecord;
 
 use crate::filtering::FilterParams;
 use crate::serialization::Sketch;

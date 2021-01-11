@@ -1,7 +1,8 @@
 use needletail::bitkmer::{bitmer_to_bytes, reverse_complement};
-use needletail::{Sequence, SequenceRecord};
+use needletail::{Sequence};
 
 use crate::sketch_schemes::{KmerCount, SketchParams, SketchScheme};
+use needletail::parser::SequenceRecord;
 
 #[derive(Clone)]
 pub struct AllCountsSketcher {
