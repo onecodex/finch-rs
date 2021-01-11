@@ -2,7 +2,6 @@ use std::collections::{HashSet, VecDeque};
 use std::fmt::Display;
 use std::fs::File;
 
-use failure::bail;
 use numpy::{PyArray, PyArray1, PyArray2};
 use pyo3::class::*;
 use pyo3::exceptions::{IndexError, KeyError};
@@ -14,7 +13,8 @@ use crate::distance::{distance, minmer_matrix};
 use crate::filtering::FilterParams;
 use crate::serialization::{write_finch_file, Sketch as SType};
 use crate::sketch_schemes::{KmerCount, SketchParams};
-use crate::{open_sketch_file, sketch_files as rs_sketch_files, Result as FinchResult};
+use crate::{open_sketch_file, sketch_files as rs_sketch_files, bail};
+use crate::errors::FinchResult;
 
 create_exception!(finch, FinchError, pyo3::exceptions::Exception);
 

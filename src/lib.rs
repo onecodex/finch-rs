@@ -1,15 +1,12 @@
 #![cfg_attr(feature = "python", feature(specialization))]
 
-extern crate capnp;
 #[macro_use]
 extern crate serde_derive;
 
 use std::fs::File;
 use std::io::{stdin, BufReader, Read};
 use std::path::Path;
-use std::result::Result as StdResult;
 
-use failure::{format_err, Error};
 use memmap::MmapOptions;
 use needletail::parse_fastx_reader;
 use rayon::prelude::*;
@@ -31,15 +28,17 @@ pub mod main_parsing;
 pub mod python;
 pub mod serialization;
 pub mod statistics;
+pub mod errors;
 
-pub type Result<T> = StdResult<T, Error>;
+use crate::errors::FinchResult;
+
 
 pub fn sketch_files(
     filenames: &[&str],
     sketch_params: &SketchParams,
     filters: &FilterParams,
-) -> Result<Vec<Sketch>> {
-    let sketches: Result<Vec<Sketch>> = filenames
+) -> FinchResult<Vec<Sketch>> {
+    let sketches: FinchResult<Vec<Sketch>> = filenames
         .par_iter()
         .map(|filename| {
             // TODO: re-enable stdin if needed
@@ -63,7 +62,7 @@ pub fn sketch_stream<'a>(
     name: &str,
     sketch_params: &SketchParams,
     filters: &FilterParams,
-) -> Result<Sketch> {
+) -> FinchResult<Sketch> {
     let mut filter_params = filters.clone();
     let mut sketcher = sketch_params.create_sketcher();
     // TODO: remove expects after removing failure
@@ -103,7 +102,7 @@ pub fn sketch_stream<'a>(
     })
 }
 
-pub fn open_sketch_file(filename: &str) -> Result<Vec<Sketch>> {
+pub fn open_sketch_file(filename: &str) -> FinchResult<Vec<Sketch>> {
     let file = File::open(filename).map_err(|_| format_err!("Error opening {}", &filename))?;
     if filename.ends_with(MASH_EXT) {
         let mut buf_reader = BufReader::new(file);

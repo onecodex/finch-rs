@@ -1,7 +1,5 @@
 #[macro_use]
 extern crate clap;
-#[macro_use]
-extern crate failure;
 extern crate finch;
 extern crate serde_json;
 
@@ -9,6 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{stderr, stdout, Write};
 use std::process::exit;
+use std::error::Error;
 
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 
@@ -18,7 +17,8 @@ use finch::serialization::{
     FINCH_EXT, MASH_EXT,
 };
 use finch::statistics::{cardinality, hist};
-use finch::{open_sketch_file, sketch_files, Result};
+use finch::{open_sketch_file, sketch_files, bail, format_err};
+use finch::errors::FinchResult;
 
 use finch::main_parsing::{
     add_filter_options, add_sketch_options, get_float_arg, get_int_arg, parse_filter_options,
@@ -42,9 +42,9 @@ fn add_output_options<'a, 'b>(app: App<'a, 'b>) -> App<'a, 'b> {
     )
 }
 
-fn output_to<F>(output_fn: F, output: Option<&str>, extension: &str) -> Result<()>
+fn output_to<F>(output_fn: F, output: Option<&str>, extension: &str) -> FinchResult<()>
 where
-    F: Fn(&mut dyn Write) -> Result<()>,
+    F: Fn(&mut dyn Write) -> FinchResult<()>,
 {
     match output {
         None => {
@@ -73,23 +73,17 @@ fn main() {
     // see https://github.com/rust-lang-nursery/failure/issues/76
     if let Err(err) = run() {
         let mut serr = stderr();
-        let mut causes = err.iter_chain();
-        writeln!(
-            serr,
-            "Error: {}",
-            causes.next().expect("`causes` to at least contain `err`")
-        )
-        .expect("unable to write error to stderr");
-        for cause in causes {
-            writeln!(serr, "Caused by: {}", cause).expect("unable to write error to stderr");
+        writeln!(serr, "Error: {:?}", err).expect("unable to write error to stderr");
+        let mut source = err.source();
+        while let Some(e) = source {
+            writeln!(serr, "Caused by: {:?}", e).expect("unable to write error to stderr");
+            source = e.source();
         }
-        // The following assumes an `Error`, use `if let Some(backtrace) ...` for a `Fail`
-        write!(serr, "{:?}", err.backtrace()).expect("unable to write error to stderr");
         exit(1);
     }
 }
 
-fn run() -> Result<()> {
+fn run() -> FinchResult<()> {
     let mut sketch_command = SubCommand::with_name("sketch")
         .about("Create sketches from FASTA/Q file(s)")
         .arg(
@@ -326,7 +320,7 @@ fn run() -> Result<()> {
     Ok(())
 }
 
-fn generate_sketch_files(matches: &ArgMatches, file_ext: &str) -> Result<()> {
+fn generate_sketch_files(matches: &ArgMatches, file_ext: &str) -> FinchResult<()> {
     let filenames: Vec<_> = matches
         .values_of("INPUT")
         .ok_or_else(|| format_err!("Bad INPUT"))?
@@ -362,7 +356,7 @@ fn generate_sketch_files(matches: &ArgMatches, file_ext: &str) -> Result<()> {
     Ok(())
 }
 
-fn parse_mash_files(matches: &ArgMatches) -> Result<Vec<Sketch>> {
+fn parse_mash_files(matches: &ArgMatches) -> FinchResult<Vec<Sketch>> {
     let filenames: Vec<_> = matches
         .values_of("INPUT")
         .ok_or_else(|| format_err!("Bad INPUT"))?

@@ -2,14 +2,14 @@ use std::mem::{discriminant, size_of};
 use std::str::FromStr;
 
 use clap::{App, Arg, ArgMatches};
-use failure::{bail, format_err};
 
 use crate::filtering::FilterParams;
 use crate::serialization::Sketch;
 use crate::sketch_schemes::SketchParams;
-use crate::Result;
+use crate::errors::FinchResult;
+use crate::{bail, format_err};
 
-pub fn get_int_arg<T: FromStr>(matches: &ArgMatches, key: &str) -> Result<T> {
+pub fn get_int_arg<T: FromStr>(matches: &ArgMatches, key: &str) -> FinchResult<T> {
     let display_key = key.replace("_", "-");
     Ok(matches
         .value_of(key)
@@ -28,7 +28,7 @@ pub fn get_float_arg<T: Copy + FromStr + Into<f64>>(
     matches: &ArgMatches,
     key: &str,
     limit: f64,
-) -> Result<T> {
+) -> FinchResult<T> {
     let display_key = key.replace("_", "-");
     Ok(matches
         .value_of(key)
@@ -72,7 +72,7 @@ pub fn add_filter_options<'a, 'b>(app: App<'a, 'b>) -> App<'a, 'b> {
          .default_value("1"))
 }
 
-pub fn parse_filter_options(matches: &ArgMatches, kmer_length: u8) -> Result<FilterParams> {
+pub fn parse_filter_options(matches: &ArgMatches, kmer_length: u8) -> FinchResult<FilterParams> {
     let filter_on = match (
         matches.is_present("filter"),
         matches.is_present("no_filter"),
@@ -163,7 +163,7 @@ pub fn parse_sketch_options(
     matches: &ArgMatches,
     kmer_length: u8,
     filters_enabled: Option<bool>,
-) -> Result<SketchParams> {
+) -> FinchResult<SketchParams> {
     Ok(match matches.value_of("sketch_type").unwrap_or("mash") {
         "mash" => {
             if matches.occurrences_of("scale") != 0 {
@@ -229,7 +229,7 @@ pub fn update_sketch_params(
     sketch_params: &mut SketchParams,
     sketch: &Sketch,
     name: &str,
-) -> Result<()> {
+) -> FinchResult<()> {
     let new_sketch_params = &sketch.sketch_params;
 
     // check that the sketching type is the same; we may want to remove

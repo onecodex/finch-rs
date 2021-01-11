@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use crate::serialization::Sketch;
 use crate::sketch_schemes::KmerCount;
 use crate::statistics::hist;
-use crate::Result;
+use crate::errors::FinchResult;
 
 /// Used to pass around filter options for sketching
 #[derive(Clone, Debug, PartialEq)]
@@ -115,7 +115,7 @@ impl FilterParams {
         filter_stats
     }
 
-    pub fn from_serialized(filters: &HashMap<String, String>) -> Result<Self> {
+    pub fn from_serialized(filters: &HashMap<String, String>) -> FinchResult<Self> {
         let low_abun = if let Some(min_copies) = filters.get("minCopies") {
             Some(min_copies.parse()?)
         } else {

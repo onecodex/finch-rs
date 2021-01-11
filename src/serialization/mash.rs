@@ -3,13 +3,14 @@ use std::io::{BufRead, Write};
 
 use capnp::message;
 use capnp::serialize as capnp_serialize;
-use failure::format_err;
 
 use crate::filtering::FilterParams;
 use crate::serialization::mash_capnp::min_hash;
 use crate::serialization::Sketch;
 use crate::sketch_schemes::{ItemHash, KmerCount, SketchParams};
-use crate::Result as FinchResult;
+use crate::errors::FinchResult;
+use crate::format_err;
+
 
 pub fn write_mash_file(mut file: &mut dyn Write, sketches: &[Sketch]) -> FinchResult<()> {
     let params = SketchParams::from_sketches(&sketches)?;
