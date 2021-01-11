@@ -173,6 +173,7 @@ Notes:
 - <sup>1</sup> Please see, however, [this issue tracking interoperability](https://github.com/marbl/Mash/issues/27) and note that other implementations may use a different seed value.
 
 ## Python Support ##
+TODO: update me
 
 Optional Python bindings require a nightly rust compiler, and [maturin](https://github.com/PyO3/maturin). Compile Finch into a python library with:
 ```bash
@@ -185,8 +186,10 @@ docker run --rm -v $(pwd):/io konstin2/maturin:master build --cargo-extra-args="
 ```
 
 Then, e.g. to calculate the similarities between two E. coli:
+
 ```python
-from finch import sketch_file
+from cli import sketch_file
+
 sketch_one = sketch_file('WIS_EcoB_v2.fas')
 sketch_two = sketch_file('WIS_Eco10798_DRAFTv1.fas')
 cont, jacc = sketch_one.compare(sketch_two)
@@ -200,8 +203,8 @@ There is a `finch.capnp` in `src/serialization` file and the output of the MinHa
 Both are generated after installing `capnp` and `cargo install capnpc` with the following command:
 
 ```bash
-capnp compile -orust:src/serialization/ --src-prefix=src/serialization/ src/serialization/finch.capnp
-capnp compile -orust:src/serialization/ --src-prefix=src/serialization/ src/serialization/mash.capnp
+capnp compile -orust:finch-lib/src/serialization/ --src-prefix=finch-lib/src/serialization/ finch-lib/src/serialization/finch.capnp
+capnp compile -orust:finch-lib/src/serialization/ --src-prefix=finch-lib/src/serialization/ finch-lib/src/serialization/mash.capnp
 ```
 
 and then search and replace for the `crate::` path to fix it `crate::serialization::`.

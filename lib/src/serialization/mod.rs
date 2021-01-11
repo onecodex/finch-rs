@@ -15,6 +15,7 @@ use std::io::{BufRead, Write};
 
 use capnp::message;
 use capnp::serialize as capnp_serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::errors::FinchResult;
 use crate::filtering::FilterParams;

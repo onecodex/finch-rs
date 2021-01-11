@@ -4,6 +4,7 @@ pub mod mash;
 pub mod scaled;
 
 use needletail::parser::SequenceRecord;
+use serde::{Deserialize, Serialize};
 
 use crate::bail;
 use crate::errors::FinchResult;

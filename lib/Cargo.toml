@@ -1,0 +1,41 @@
+[package]
+name = "finch_lib"
+version = "0.4.0"
+authors = ["One Codex <vincent@onecodex.com>"]
+description = "An implementation of min-wise independent permutation locality sensitive hashing ('MinHashing') for genomic data and command-line utility for manipulation."
+keywords = ["minhash", "bioinformatics", "sketches"]
+categories = ["science"]
+repository = "https://github.com/onecodex/finch-rs"
+license = "MIT"
+readme = "../README.md"
+edition = "2018"
+
+[dependencies]
+bincode = "1.2.0"
+capnp = "0.14"
+memmap = "0.7.0"
+murmurhash3 = "0.0.5"
+ndarray = "0.14"
+needletail = "0.4"
+numpy = { version = "0.13", optional = true }
+pyo3 = { version = "0.13", optional = true }
+rayon = "1.2.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+
+[dev-dependencies]
+predicates = "1"
+proptest = "0.10"
+
+[features]
+default = []
+python = ["numpy", "pyo3"]
+
+[lib]
+crate-type=["cdylib", "rlib"]
+name = "finch"
+
+[package.metadata.maturin]
+maintainer = "One Codex"
+classifier = ["Intended Audience :: Science/Research", "License :: OSI Approved :: MIT License", "Topic :: Scientific/Engineering :: Bio-Informatics"]
