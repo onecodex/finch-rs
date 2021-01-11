@@ -183,7 +183,7 @@ pub fn write_finch_file(mut file: &mut dyn Write, sketches: &[Sketch]) -> Result
 }
 
 pub fn read_finch_file(mut file: &mut dyn BufRead) -> Result<Vec<Sketch>> {
-    let options = *message::ReaderOptions::new().traversal_limit_in_words(1024 * 1024 * 1024);
+    let options = *message::ReaderOptions::new().traversal_limit_in_words(Some(1024 * 1024 * 1024));
     let reader = capnp_serialize::read_message(&mut file, options)?;
     let cap_data: multisketch::Reader = reader.get_root::<multisketch::Reader>()?;
     let cap_sketches = cap_data.get_sketches()?;

@@ -192,6 +192,20 @@ sketch_two = sketch_file('WIS_Eco10798_DRAFTv1.fas')
 cont, jacc = sketch_one.compare(sketch_two)
 ```
 
+## Cap'n Proto
+
+There is a `finch.capnp` in `src/serialization` file and the output of the MinHash schema (https://github.com/marbl/Mash/blob/54e6d66b7720035a2605a02892cad027ef3231ef/src/mash/capnp/MinHash.capnp) 
++ the changes by @bovee in https://github.com/bovee/Mash/blob/master/src/mash/capnp/MinHash.capnp
+
+Both are generated after installing `capnp` and `cargo install capnpc` with the following command:
+
+```bash
+capnp compile -orust:src/serialization/ --src-prefix=src/serialization/ src/serialization/finch.capnp
+capnp compile -orust:src/serialization/ --src-prefix=src/serialization/ src/serialization/mash.capnp
+```
+
+and then search and replace for the `crate::` path to fix it `crate::serialization::`.
+
 ## Contributions ##
 
 Problems or suggestions for improvement can be reported through GitHub issues.
