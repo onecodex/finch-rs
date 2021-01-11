@@ -1,10 +1,9 @@
-#![cfg_attr(feature = "python", feature(specialization))]
 
 #[macro_use]
 extern crate serde_derive;
 
 use std::fs::File;
-use std::io::{stdin, BufReader, Read};
+use std::io::{BufReader, Read};
 use std::path::Path;
 
 use memmap::MmapOptions;

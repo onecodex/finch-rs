@@ -18,8 +18,8 @@ memmap = "0.7.0"
 murmurhash3 = "0.0.5"
 ndarray = "0.14"
 needletail = "0.4"
-numpy = { version = "0.7.0", optional = true }
-pyo3 = { version = "0.8.2", optional = true, features=["extension-module"] }
+numpy = { version = "0.13", optional = true }
+pyo3 = { version = "0.13", optional = true }
 rayon = "1.2.0"
 serde = "1.0.101"
 serde_derive = "1.0.101"
@@ -38,6 +38,7 @@ python = ["numpy", "pyo3"]
 [lib]
 crate-type=["cdylib", "rlib"]
 name = "finch"
+
 
 [package.metadata.maturin]
 maintainer = "One Codex"
