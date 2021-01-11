@@ -1,10 +1,10 @@
 use std::cmp;
 use std::collections::HashMap;
 
+use crate::errors::FinchResult;
 use crate::serialization::Sketch;
 use crate::sketch_schemes::KmerCount;
 use crate::statistics::hist;
-use crate::errors::FinchResult;
 
 /// Used to pass around filter options for sketching
 #[derive(Clone, Debug, PartialEq)]

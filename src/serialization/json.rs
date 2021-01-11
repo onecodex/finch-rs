@@ -5,12 +5,12 @@ use std::mem;
 use serde::de::{self, Deserialize, Deserializer, Visitor};
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 
+use crate::bail;
+use crate::errors::FinchResult;
 use crate::filtering::FilterParams;
 pub use crate::serialization::mash::{read_mash_file, write_mash_file};
 use crate::serialization::Sketch;
 use crate::sketch_schemes::{KmerCount, SketchParams};
-use crate::errors::{FinchResult};
-use crate::bail;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct JsonSketch {

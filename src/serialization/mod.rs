@@ -1,28 +1,27 @@
-// Compile the capnp schema with `capnp compile ./src/serialization/finch.capnp -orust`
-//
-// paths are broken so you need `%s/::finch_capnp::/super::/g`; see:
-// https://github.com/capnproto/capnproto-rust/issues/16
-//
-// also add the following to disable most warnings:
-// #![allow(clippy::all)]
-// #![allow(dead_code)]
+// Those 2 files are generated so we just ignore everything in terms
+#[allow(clippy::all)]
+#[allow(dead_code)]
+#[cfg_attr(rustfmt, rustfmt_skip)]
 mod finch_capnp;
+#[allow(clippy::all)]
+#[allow(dead_code)]
+#[cfg_attr(rustfmt, rustfmt_skip)]
+mod mash_capnp;
 
 mod json;
 mod mash;
-mod mash_capnp;
 
 use std::io::{BufRead, Write};
 
 use capnp::message;
 use capnp::serialize as capnp_serialize;
 
+use crate::errors::FinchResult;
 use crate::filtering::FilterParams;
 use crate::serialization::finch_capnp::{multisketch, sketch_params, SketchMethod};
 pub use crate::serialization::json::{JsonSketch, MultiSketch};
 pub use crate::serialization::mash::{read_mash_file, write_mash_file};
 use crate::sketch_schemes::{KmerCount, SketchParams};
-use crate::errors::FinchResult;
 
 pub const FINCH_EXT: &str = ".sk";
 pub const FINCH_BIN_EXT: &str = ".bsk";

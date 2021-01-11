@@ -23,15 +23,14 @@ pub mod filtering;
 pub mod sketch_schemes;
 // it would be nice if there was a `pub(in main)` or something for
 // main_parsing so we don't import it for `lib` itself
+pub mod errors;
 pub mod main_parsing;
 #[cfg(feature = "python")]
 pub mod python;
 pub mod serialization;
 pub mod statistics;
-pub mod errors;
 
 use crate::errors::FinchResult;
-
 
 pub fn sketch_files(
     filenames: &[&str],

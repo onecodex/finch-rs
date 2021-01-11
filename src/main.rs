@@ -4,21 +4,21 @@ extern crate finch;
 extern crate serde_json;
 
 use std::collections::{HashMap, HashSet};
+use std::error::Error;
 use std::fs::File;
 use std::io::{stderr, stdout, Write};
 use std::process::exit;
-use std::error::Error;
 
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 
 use finch::distance::distance;
+use finch::errors::FinchResult;
 use finch::serialization::{
     write_finch_file, write_mash_file, MultiSketch, Sketch, SketchDistance, FINCH_BIN_EXT,
     FINCH_EXT, MASH_EXT,
 };
 use finch::statistics::{cardinality, hist};
-use finch::{open_sketch_file, sketch_files, bail, format_err};
-use finch::errors::FinchResult;
+use finch::{bail, format_err, open_sketch_file, sketch_files};
 
 use finch::main_parsing::{
     add_filter_options, add_sketch_options, get_float_arg, get_int_arg, parse_filter_options,

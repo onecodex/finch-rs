@@ -3,10 +3,10 @@ use std::str::FromStr;
 
 use clap::{App, Arg, ArgMatches};
 
+use crate::errors::FinchResult;
 use crate::filtering::FilterParams;
 use crate::serialization::Sketch;
 use crate::sketch_schemes::SketchParams;
-use crate::errors::FinchResult;
 use crate::{bail, format_err};
 
 pub fn get_int_arg<T: FromStr>(matches: &ArgMatches, key: &str) -> FinchResult<T> {

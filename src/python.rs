@@ -10,11 +10,11 @@ use pyo3::types::{PyAny, PyBytes, PyDict, PyList, PyTuple, PyType};
 use pyo3::{create_exception, wrap_pyfunction};
 
 use crate::distance::{distance, minmer_matrix};
+use crate::errors::FinchResult;
 use crate::filtering::FilterParams;
 use crate::serialization::{write_finch_file, Sketch as SType};
 use crate::sketch_schemes::{KmerCount, SketchParams};
-use crate::{open_sketch_file, sketch_files as rs_sketch_files, bail};
-use crate::errors::FinchResult;
+use crate::{bail, open_sketch_file, sketch_files as rs_sketch_files};
 
 create_exception!(finch, FinchError, pyo3::exceptions::Exception);
 

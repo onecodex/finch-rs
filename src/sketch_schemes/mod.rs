@@ -5,10 +5,10 @@ pub mod scaled;
 
 use needletail::parser::SequenceRecord;
 
+use crate::bail;
+use crate::errors::FinchResult;
 use crate::filtering::FilterParams;
 use crate::serialization::Sketch;
-use crate::errors::FinchResult;
-use crate::bail;
 pub use hashing::ItemHash;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Hash, Serialize)]

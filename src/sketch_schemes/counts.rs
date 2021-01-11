@@ -1,5 +1,5 @@
 use needletail::bitkmer::{bitmer_to_bytes, reverse_complement};
-use needletail::{Sequence};
+use needletail::Sequence;
 
 use crate::sketch_schemes::{KmerCount, SketchParams, SketchScheme};
 use needletail::parser::SequenceRecord;

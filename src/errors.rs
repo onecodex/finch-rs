@@ -22,7 +22,6 @@ pub enum FinchError {
     Message(String),
 }
 
-
 pub type FinchResult<T> = StdResult<T, FinchError>;
 
 // TODO: remove the macro magic if possible when done with moving off failure

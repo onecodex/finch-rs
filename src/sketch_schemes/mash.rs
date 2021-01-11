@@ -2,7 +2,7 @@ use std::collections::{BinaryHeap, HashMap};
 use std::hash::BuildHasherDefault;
 use std::usize;
 
-use needletail::{Sequence};
+use needletail::Sequence;
 
 use crate::sketch_schemes::hashing::{hash_f, HashedItem, NoHashHasher};
 use crate::sketch_schemes::{ItemHash, KmerCount, SketchParams, SketchScheme};
