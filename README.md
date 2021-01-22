@@ -172,25 +172,43 @@ There are several other implementations of the Mash algorithm which should be co
 Notes:
 - <sup>1</sup> Please see, however, [this issue tracking interoperability](https://github.com/marbl/Mash/issues/27) and note that other implementations may use a different seed value.
 
-## Python Support ##
+## Python Support ##e
+You can compile Finch into a python library with:
 
-Optional Python bindings require a nightly rust compiler, and [maturin](https://github.com/PyO3/maturin). Compile Finch into a python library with:
 ```bash
-rustup default nightly
 pip install maturin
+cd lib
 maturin install --cargo-extra-args="--features=python" --release --strip
 # or maturin develop, etc
 # to cross-compile linux wheels:
+cp ../README.md .
+# and edit the readme key of config.toml
 docker run --rm -v $(pwd):/io konstin2/maturin:master build --cargo-extra-args="--features=python" --release --strip
 ```
 
 Then, e.g. to calculate the similarities between two E. coli:
+
 ```python
-from finch import sketch_file
+from cli import sketch_file
+
 sketch_one = sketch_file('WIS_EcoB_v2.fas')
 sketch_two = sketch_file('WIS_Eco10798_DRAFTv1.fas')
 cont, jacc = sketch_one.compare(sketch_two)
 ```
+
+## Cap'n Proto
+
+There is a `finch.capnp` in `src/serialization` file and the output of the MinHash schema (https://github.com/marbl/Mash/blob/54e6d66b7720035a2605a02892cad027ef3231ef/src/mash/capnp/MinHash.capnp) 
++ the changes by @bovee in https://github.com/bovee/Mash/blob/master/src/mash/capnp/MinHash.capnp
+
+Both are generated after installing `capnp` and `cargo install capnpc` with the following command:
+
+```bash
+capnp compile -orust:finch-lib/src/serialization/ --src-prefix=finch-lib/src/serialization/ finch-lib/src/serialization/finch.capnp
+capnp compile -orust:finch-lib/src/serialization/ --src-prefix=finch-lib/src/serialization/ finch-lib/src/serialization/mash.capnp
+```
+
+and then search and replace for the `crate::` path to fix it `crate::serialization::`.
 
 ## Contributions ##
 

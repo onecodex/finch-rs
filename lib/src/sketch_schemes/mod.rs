@@ -3,12 +3,13 @@ mod hashing;
 pub mod mash;
 pub mod scaled;
 
-use failure::bail;
-use needletail::SequenceRecord;
+use needletail::parser::SequenceRecord;
+use serde::{Deserialize, Serialize};
 
+use crate::bail;
+use crate::errors::FinchResult;
 use crate::filtering::FilterParams;
 use crate::serialization::Sketch;
-use crate::Result as FinchResult;
 pub use hashing::ItemHash;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Hash, Serialize)]

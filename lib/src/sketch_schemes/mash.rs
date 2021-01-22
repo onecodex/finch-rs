@@ -2,10 +2,11 @@ use std::collections::{BinaryHeap, HashMap};
 use std::hash::BuildHasherDefault;
 use std::usize;
 
-use needletail::{Sequence, SequenceRecord};
+use needletail::Sequence;
 
 use crate::sketch_schemes::hashing::{hash_f, HashedItem, NoHashHasher};
 use crate::sketch_schemes::{ItemHash, KmerCount, SketchParams, SketchScheme};
+use needletail::parser::SequenceRecord;
 
 #[derive(Clone, Debug)]
 pub struct MashSketcher {
@@ -66,7 +67,7 @@ impl MashSketcher {
 
 impl SketchScheme for MashSketcher {
     fn process(&mut self, seq: SequenceRecord) {
-        self.total_bases += seq.seq.len() as u64;
+        self.total_bases += seq.sequence().len() as u64;
         let rc = seq.reverse_complement();
         for (_, kmer, is_rev_complement) in
             seq.normalize(false).canonical_kmers(self.kmer_length, &rc)

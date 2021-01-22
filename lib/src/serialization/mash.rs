@@ -1,15 +1,13 @@
-use std::convert::TryFrom;
 use std::io::{BufRead, Write};
 
 use capnp::message;
 use capnp::serialize as capnp_serialize;
-use failure::format_err;
 
+use crate::errors::FinchResult;
 use crate::filtering::FilterParams;
 use crate::serialization::mash_capnp::min_hash;
 use crate::serialization::Sketch;
 use crate::sketch_schemes::{ItemHash, KmerCount, SketchParams};
-use crate::Result as FinchResult;
 
 pub fn write_mash_file(mut file: &mut dyn Write, sketches: &[Sketch]) -> FinchResult<()> {
     let params = SketchParams::from_sketches(&sketches)?;
@@ -50,12 +48,7 @@ pub fn write_mash_file(mut file: &mut dyn Write, sketches: &[Sketch]) -> FinchRe
             }
             let mash_counts = mash_sketch.init_counts32(sketch.hashes.len() as u32);
             for (j, hash) in sketch.hashes.iter().enumerate() {
-                mash_counts.reborrow().set(
-                    j as u32,
-                    TryFrom::try_from(hash.count).map_err(|_| {
-                        format_err!("Counts greater than 32-bit not supported in mash files")
-                    })?,
-                );
+                mash_counts.reborrow().set(j as u32, hash.count);
             }
         }
     }
@@ -65,7 +58,7 @@ pub fn write_mash_file(mut file: &mut dyn Write, sketches: &[Sketch]) -> FinchRe
 }
 
 pub fn read_mash_file(mut file: &mut dyn BufRead) -> FinchResult<Vec<Sketch>> {
-    let options = *message::ReaderOptions::new().traversal_limit_in_words(1024 * 1024 * 1024);
+    let options = *message::ReaderOptions::new().traversal_limit_in_words(Some(1024 * 1024 * 1024));
     let reader = capnp_serialize::read_message(&mut file, options)?;
     let mash_data: min_hash::Reader = reader.get_root::<min_hash::Reader>()?;
 

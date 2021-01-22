@@ -2,15 +2,16 @@ use std::collections::HashMap;
 use std::fmt;
 use std::mem;
 
-use failure::bail;
-use serde::de::{self, Deserialize, Deserializer, Visitor};
-use serde::ser::{Serialize, SerializeStruct, Serializer};
+use serde::de::{self, Deserializer, Visitor};
+use serde::ser::{SerializeStruct, Serializer};
+use serde::{Deserialize, Serialize};
 
+use crate::bail;
+use crate::errors::FinchResult;
 use crate::filtering::FilterParams;
 pub use crate::serialization::mash::{read_mash_file, write_mash_file};
 use crate::serialization::Sketch;
 use crate::sketch_schemes::{KmerCount, SketchParams};
-use crate::Result as FinchResult;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct JsonSketch {

@@ -1,28 +1,28 @@
-// Compile the capnp schema with `capnp compile ./src/serialization/finch.capnp -orust`
-//
-// paths are broken so you need `%s/::finch_capnp::/super::/g`; see:
-// https://github.com/capnproto/capnproto-rust/issues/16
-//
-// also add the following to disable most warnings:
-// #![allow(clippy::all)]
-// #![allow(dead_code)]
+// Those 2 files are generated so we just ignore everything in terms
+#[allow(clippy::all)]
+#[allow(dead_code)]
+#[cfg_attr(rustfmt, rustfmt_skip)]
 mod finch_capnp;
+#[allow(clippy::all)]
+#[allow(dead_code)]
+#[cfg_attr(rustfmt, rustfmt_skip)]
+mod mash_capnp;
 
 mod json;
 mod mash;
-mod mash_capnp;
 
 use std::io::{BufRead, Write};
 
 use capnp::message;
 use capnp::serialize as capnp_serialize;
+use serde::{Deserialize, Serialize};
 
+use crate::errors::FinchResult;
 use crate::filtering::FilterParams;
 use crate::serialization::finch_capnp::{multisketch, sketch_params, SketchMethod};
 pub use crate::serialization::json::{JsonSketch, MultiSketch};
 pub use crate::serialization::mash::{read_mash_file, write_mash_file};
 use crate::sketch_schemes::{KmerCount, SketchParams};
-use crate::Result;
 
 pub const FINCH_EXT: &str = ".sk";
 pub const FINCH_BIN_EXT: &str = ".bsk";
@@ -111,7 +111,7 @@ fn set_sketch_params(mut cap_sketch_params: sketch_params::Builder, sketch_param
     }
 }
 
-fn get_sketch_params(cap_sketch_params: sketch_params::Reader) -> Result<SketchParams> {
+fn get_sketch_params(cap_sketch_params: sketch_params::Reader) -> FinchResult<SketchParams> {
     Ok(match cap_sketch_params.get_sketch_method()? {
         SketchMethod::MurmurHash3 => SketchParams::Mash {
             kmers_to_sketch: cap_sketch_params.get_kmers_to_sketch() as usize,
@@ -132,7 +132,7 @@ fn get_sketch_params(cap_sketch_params: sketch_params::Reader) -> Result<SketchP
     })
 }
 
-pub fn write_finch_file(mut file: &mut dyn Write, sketches: &[Sketch]) -> Result<()> {
+pub fn write_finch_file(mut file: &mut dyn Write, sketches: &[Sketch]) -> FinchResult<()> {
     let mut message = message::Builder::new_default();
     let finch_file: multisketch::Builder = message.init_root::<multisketch::Builder>();
 
@@ -182,8 +182,8 @@ pub fn write_finch_file(mut file: &mut dyn Write, sketches: &[Sketch]) -> Result
     Ok(())
 }
 
-pub fn read_finch_file(mut file: &mut dyn BufRead) -> Result<Vec<Sketch>> {
-    let options = *message::ReaderOptions::new().traversal_limit_in_words(1024 * 1024 * 1024);
+pub fn read_finch_file(mut file: &mut dyn BufRead) -> FinchResult<Vec<Sketch>> {
+    let options = *message::ReaderOptions::new().traversal_limit_in_words(Some(1024 * 1024 * 1024));
     let reader = capnp_serialize::read_message(&mut file, options)?;
     let cap_data: multisketch::Reader = reader.get_root::<multisketch::Reader>()?;
     let cap_sketches = cap_data.get_sketches()?;

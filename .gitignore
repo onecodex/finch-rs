@@ -1,5 +1,4 @@
 target
-Cargo.lock
 .DS_Store
 
 *.swp
@@ -9,3 +8,5 @@ venv/
 dist/
 __pycache__/
 .idea/
+lib/Cargo.lock
+

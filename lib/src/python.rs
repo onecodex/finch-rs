@@ -1,28 +1,28 @@
 use std::collections::{HashSet, VecDeque};
-use std::fmt::Display;
 use std::fs::File;
 
-use failure::bail;
 use numpy::{PyArray, PyArray1, PyArray2};
 use pyo3::class::*;
-use pyo3::exceptions::{IndexError, KeyError};
+use pyo3::exceptions::{PyIndexError, PyKeyError};
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyBytes, PyDict, PyList, PyTuple, PyType};
 use pyo3::{create_exception, wrap_pyfunction};
 
 use crate::distance::{distance, minmer_matrix};
+use crate::errors::FinchResult;
 use crate::filtering::FilterParams;
-use crate::serialization::{write_finch_file, Sketch as SType};
+use crate::serialization::{write_finch_file, Sketch as SketchRs};
 use crate::sketch_schemes::{KmerCount, SketchParams};
-use crate::{open_sketch_file, sketch_files as rs_sketch_files, Result as FinchResult};
+use crate::{bail, open_sketch_file, sketch_files as rs_sketch_files};
 
-create_exception!(finch, FinchError, pyo3::exceptions::Exception);
-
-fn to_pyerr(e: impl Display) -> PyErr {
-    PyErr::new::<FinchError, _>(format!("{}", e))
+create_exception!(finch, FinchError, pyo3::exceptions::PyException);
+macro_rules! py_try {
+    ($call:expr) => {
+        $call.map_err(|e| PyErr::new::<FinchError, _>(format!("{}", e)))?
+    };
 }
 
-fn merge_sketches(sketch: &mut SType, other: &SType, size: Option<usize>) -> FinchResult<()> {
+fn merge_sketches(sketch: &mut SketchRs, other: &SketchRs, size: Option<usize>) -> FinchResult<()> {
     // update my parameters from the remote's
     sketch.seq_length += other.seq_length;
     sketch.num_valid_kmers += other.num_valid_kmers;
@@ -100,35 +100,34 @@ fn merge_sketches(sketch: &mut SType, other: &SType, size: Option<usize>) -> Fin
     Ok(())
 }
 
-#[pyclass]
 /// A Multisketch is a collection of Sketchs with information about their
 /// generation parameters (to make sure they're consistant for distance
 /// calculation).
+#[pyclass]
 pub struct Multisketch {
-    pub sketches: Vec<SType>,
+    pub sketches: Vec<SketchRs>,
 }
 
 #[pymethods]
 impl Multisketch {
-    #[classmethod]
     /// open(filename: str)
     ///
     /// Takes a file path to a `.sk`, `.bsk` or a `.mash` file and returns the
     /// Multisketch contained within that file.
+    #[classmethod]
     pub fn open(_cls: &PyType, filename: &str) -> PyResult<Multisketch> {
         Ok(Multisketch {
-            sketches: open_sketch_file(filename).map_err(to_pyerr)?,
+            sketches: py_try!(open_sketch_file(filename)),
         })
     }
 
-    #[classmethod]
     /// from_sketches(sketches: List[Sketch])
     ///
     /// Create a Multisketch from a list of sketches. Useful for, e.g.
     /// workflows where a bunch of individual sketches are processed and then
     /// need to be outputed to one sketch file.
-    pub fn from_sketches(_cls: &PyType, sketches: &PyList) -> PyResult<Multisketch> {
-        let sketches: Vec<&Sketch> = sketches.extract()?;
+    #[classmethod]
+    pub fn from_sketches(_cls: &PyType, sketches: Vec<PyRef<Sketch>>) -> PyResult<Multisketch> {
         let sketches = sketches.iter().map(|s| s.s.clone()).collect();
         Ok(Multisketch { sketches })
     }
@@ -141,7 +140,7 @@ impl Multisketch {
         // TODO: support other file formats
         let mut out = File::create(&filename)
             .map_err(|_| PyErr::new::<FinchError, _>(format!("Could not create {}", filename)))?;
-        write_finch_file(&mut out, &self.sketches).map_err(to_pyerr)?;
+        py_try!(write_finch_file(&mut out, &self.sketches));
         Ok(())
     }
 
@@ -166,7 +165,7 @@ impl Multisketch {
         // containment as our metric
         let mut max_containment: f64 = 0.;
         for (ix, sketch) in self.sketches.iter().enumerate() {
-            let dist = distance(&query.s, &sketch, false).map_err(to_pyerr)?;
+            let dist = py_try!(distance(&query.s, &sketch, false));
             if dist.containment > max_containment {
                 max_containment = dist.containment;
                 best_sketch = ix;
@@ -184,7 +183,7 @@ impl Multisketch {
         let mut filtered_sketches = Vec::new();
         for sketch in &self.sketches {
             // TODO: use best_distance here and elsewhere?
-            let dist = distance(&query.s, &sketch, false).map_err(to_pyerr)?;
+            let dist = py_try!(distance(&query.s, &sketch, false));
             if dist.containment >= threshold {
                 filtered_sketches.push(sketch.clone());
             }
@@ -259,7 +258,7 @@ impl PyObjectProtocol for Multisketch {
 }
 
 #[inline]
-fn _get_sketch_index(sketches: &[SType], key: &PyAny) -> PyResult<usize> {
+fn _get_sketch_index(sketches: &[SketchRs], key: &PyAny) -> PyResult<usize> {
     if let Ok(int_key) = key.extract::<isize>() {
         let l = sketches.len() as isize;
         if -l <= int_key && int_key < 0 {
@@ -267,7 +266,7 @@ fn _get_sketch_index(sketches: &[SType], key: &PyAny) -> PyResult<usize> {
         } else if 0 <= int_key && int_key < l {
             Ok(int_key as usize)
         } else {
-            Err(PyErr::new::<IndexError, _>("index out of range"))
+            Err(PyErr::new::<PyIndexError, _>("index out of range"))
         }
     } else if let Ok(str_key) = key.extract::<&str>() {
         // TODO: we should maybe build an internal HashMap cache for this?
@@ -277,7 +276,7 @@ fn _get_sketch_index(sketches: &[SType], key: &PyAny) -> PyResult<usize> {
         if let Some(idx) = remove_idx {
             Ok(idx)
         } else {
-            Err(PyErr::new::<KeyError, _>(str_key.to_string()))
+            Err(PyErr::new::<PyKeyError, _>(str_key.to_string()))
         }
     } else {
         Err(PyErr::new::<FinchError, _>(
@@ -323,13 +322,13 @@ impl PySequenceProtocol for Multisketch {
 /// sequencing file.
 #[pyclass]
 pub struct Sketch {
-    pub s: SType,
+    pub s: SketchRs,
 }
 
 #[pymethods]
 impl Sketch {
     #[new]
-    fn __new__(obj: &PyRawObject, name: &str) -> PyResult<()> {
+    fn new(name: &str) -> Self {
         // TODO: take a hashes parameter: Vec<(usize, &[u8], u16, u16)>,
         // and a sketch_params?
         let sketch_params = SketchParams::Mash {
@@ -339,7 +338,7 @@ impl Sketch {
             kmer_length: 21,
             hash_seed: 0,
         };
-        let s = SType {
+        let s = SketchRs {
             name: name.to_string(),
             seq_length: 0,
             num_valid_kmers: 0,
@@ -348,8 +347,7 @@ impl Sketch {
             sketch_params,
             filter_params: FilterParams::default(),
         };
-        obj.init(Sketch { s });
-        Ok(())
+        Sketch { s }
     }
 
     #[getter]
@@ -477,7 +475,7 @@ impl Sketch {
     /// that have 'high' hashes because they're under `size`, this will
     /// potentially remove those hashes if the new sketch is large enough).
     pub fn merge(&mut self, sketch: &Sketch, size: Option<usize>) -> PyResult<()> {
-        Ok(merge_sketches(&mut self.s, &sketch.s, size).map_err(to_pyerr)?)
+        Ok(py_try!(merge_sketches(&mut self.s, &sketch.s, size)))
     }
 
     /// compare(self, sketch: Sketch, old_mode: bool = False) -> (float, float)
@@ -488,7 +486,7 @@ impl Sketch {
     /// older did; for most uses you probably don't want this.
     #[args(old_mode = false)]
     pub fn compare(&self, sketch: &Sketch, old_mode: bool) -> PyResult<(f64, f64)> {
-        let dist = distance(&sketch.s, &self.s, old_mode).map_err(to_pyerr)?;
+        let dist = py_try!(distance(&sketch.s, &self.s, old_mode));
 
         Ok((dist.containment, dist.jaccard))
     }
@@ -575,7 +573,7 @@ impl Sketch {
     /// this sketch's count array (`self.counts`).
     #[args(args = "*")]
     pub fn compare_matrix(&self, args: &PyTuple) -> PyResult<Py<PyArray2<i32>>> {
-        let sketches: Vec<&Sketch> = args.extract()?;
+        let sketches: Vec<PyRef<Sketch>> = args.extract()?;
         let sketch_kmers: Vec<&[KmerCount]> = sketches.iter().map(|s| &s.s.hashes[..]).collect();
         let result = minmer_matrix(&self.s.hashes, &sketch_kmers);
 
@@ -595,13 +593,14 @@ impl Sketch {
 
     #[setter]
     pub fn set_counts(&mut self, value: &PyArray1<i32>) -> PyResult<()> {
-        if value.len() != self.s.hashes.len() {
+        let val: Vec<i32> = value.extract()?;
+        if val.len() != self.s.hashes.len() {
             return Err(PyErr::new::<FinchError, _>(
                 "counts must be same length as sketch",
             ));
         }
         let mut new_hashes = Vec::new();
-        for (s, v) in self.s.hashes.iter_mut().zip(value.as_array().iter()) {
+        for (s, v) in self.s.hashes.iter_mut().zip(val.iter()) {
             if *v < 0 {
                 return Err(PyErr::new::<FinchError, _>(format!(
                     "Negative count {} not supported",
@@ -639,8 +638,8 @@ impl PyMappingProtocol for Sketch {
     }
 }
 
-impl From<SType> for Sketch {
-    fn from(s: SType) -> Self {
+impl From<SketchRs> for Sketch {
+    fn from(s: SketchRs) -> Self {
         Sketch { s }
     }
 }
@@ -688,18 +687,19 @@ pub fn sketch_file(
         err_filter: 1.,
         strand_filter: 0.1,
     };
-    let sketches = rs_sketch_files(&[filename], &sketch_params, &filters);
+    let mut sketches = py_try!(rs_sketch_files(&[filename], &sketch_params, &filters));
     Ok(Sketch {
-        s: sketches.map_err(to_pyerr)?.pop().unwrap(),
+        s: sketches.pop().unwrap(),
     })
 }
 
 /// Finch is a MinHash sketch processing library.
 #[pymodule]
-fn finch(_py: Python, m: &PyModule) -> PyResult<()> {
+fn finch(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<Multisketch>()?;
     m.add_class::<Sketch>()?;
     m.add_wrapped(wrap_pyfunction!(sketch_file))?;
+    m.add("FinchError", py.get_type::<FinchError>())?;
 
     Ok(())
 }
