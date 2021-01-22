@@ -2,8 +2,9 @@ use std::collections::HashMap;
 use std::fmt;
 use std::mem;
 
-use serde::de::{self, Deserialize, Deserializer, Visitor};
-use serde::ser::{Serialize, SerializeStruct, Serializer};
+use serde::de::{self, Deserializer, Visitor};
+use serde::ser::{SerializeStruct, Serializer};
+use serde::{Deserialize, Serialize};
 
 use crate::bail;
 use crate::errors::FinchResult;
