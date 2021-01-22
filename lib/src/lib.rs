@@ -93,8 +93,13 @@ pub fn sketch_stream<'a>(
     })
 }
 
-pub fn open_sketch_file(filename: &str) -> FinchResult<Vec<Sketch>> {
-    let file = File::open(filename).map_err(|_| format_err!("Error opening {}", &filename))?;
+pub fn open_sketch_file<P: AsRef<Path>>(path: P) -> FinchResult<Vec<Sketch>> {
+    let p = path.as_ref();
+    let filename = p
+        .file_name()
+        .ok_or_else(|| format_err!("Path does not have a filename: {:?}", p))?
+        .to_string_lossy();
+    let file = File::open(p).map_err(|_| format_err!("Error opening {:?}", p))?;
     if filename.ends_with(MASH_EXT) {
         let mut buf_reader = BufReader::new(file);
         read_mash_file(&mut buf_reader)
@@ -103,8 +108,8 @@ pub fn open_sketch_file(filename: &str) -> FinchResult<Vec<Sketch>> {
         read_finch_file(&mut buf_reader)
     } else if filename.ends_with(FINCH_EXT) || filename.ends_with(".json") {
         let mapped = unsafe { MmapOptions::new().map(&file)? };
-        let multisketch: MultiSketch = serde_json::from_slice(&mapped)
-            .map_err(|_| format_err!("Error parsing {}", &filename))?;
+        let multisketch: MultiSketch =
+            serde_json::from_slice(&mapped).map_err(|_| format_err!("Error parsing {:?}", &p))?;
         multisketch.to_sketches()
     } else {
         Err(format_err!("File suffix is not *.bsk, *.msh, or *.sk"))
