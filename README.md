@@ -172,16 +172,17 @@ There are several other implementations of the Mash algorithm which should be co
 Notes:
 - <sup>1</sup> Please see, however, [this issue tracking interoperability](https://github.com/marbl/Mash/issues/27) and note that other implementations may use a different seed value.
 
-## Python Support ##
-TODO: update me
+## Python Support ##e
+You can compile Finch into a python library with:
 
-Optional Python bindings require a nightly rust compiler, and [maturin](https://github.com/PyO3/maturin). Compile Finch into a python library with:
 ```bash
-rustup default nightly
 pip install maturin
+cd lib
 maturin install --cargo-extra-args="--features=python" --release --strip
 # or maturin develop, etc
 # to cross-compile linux wheels:
+cp ../README.md .
+# and edit the readme key of config.toml
 docker run --rm -v $(pwd):/io konstin2/maturin:master build --cargo-extra-args="--features=python" --release --strip
 ```
 

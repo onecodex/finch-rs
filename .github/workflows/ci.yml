@@ -36,11 +36,7 @@ jobs:
           . venv/bin/activate
           cd lib
           maturin develop --cargo-extra-args="--features=python"
-#      - name: Run the python tests
-#        run: |
-#          . venv/bin/activate
-#          python test_python.py
-      - name: compile taxonomy with python bindings
+      - name: compile finch with python bindings
         run: |
           . venv/bin/activate
           cd lib
@@ -65,7 +61,7 @@ jobs:
         run:  rustc --version; cargo --version;
 
       - name: Run all tests
-        run: cargo test
+        run: cargo test --all
 
   fmt:
     runs-on: ubuntu-latest
@@ -99,4 +95,4 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: -- -D warnings
+          args: --all -- -D warnings

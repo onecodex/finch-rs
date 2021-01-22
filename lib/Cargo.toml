@@ -30,7 +30,7 @@ proptest = "0.10"
 
 [features]
 default = []
-python = ["numpy", "pyo3"]
+python = ["numpy", "pyo3", "pyo3/extension-module"]
 
 [lib]
 crate-type=["cdylib", "rlib"]
