@@ -9,4 +9,4 @@ dist/
 __pycache__/
 .idea/
 lib/Cargo.lock
-
+lib/README.md
