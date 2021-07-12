@@ -179,7 +179,7 @@ You can compile Finch into a python library with:
 ```bash
 pip install maturin
 cd lib
-maturin install --cargo-extra-args="--features=python" --release --strip
+maturin develop --cargo-extra-args="--features=python" --release --strip
 # or maturin develop, etc
 # to cross-compile linux wheels:
 cp ../README.md .
@@ -190,7 +190,7 @@ docker run --rm -v $(pwd):/io konstin2/maturin:master build --cargo-extra-args="
 Then, e.g. to calculate the similarities between two E. coli:
 
 ```python
-from cli import sketch_file
+from finch import sketch_file
 
 sketch_one = sketch_file('WIS_EcoB_v2.fas')
 sketch_two = sketch_file('WIS_Eco10798_DRAFTv1.fas')
