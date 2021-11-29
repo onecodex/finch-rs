@@ -173,7 +173,7 @@ There are several other implementations of the Mash algorithm which should be co
 Notes:
 - <sup>1</sup> Please see, however, [this issue tracking interoperability](https://github.com/marbl/Mash/issues/27) and note that other implementations may use a different seed value.
 
-## Python Support ##e
+## Python Support ##
 You can compile Finch into a python library with:
 
 ```bash
