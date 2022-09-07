@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 
-use ndarray::Array2;
+use numpy::ndarray::Array2;
 
 use crate::serialization::{Sketch, SketchDistance};
 use crate::sketch_schemes::KmerCount;

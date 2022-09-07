@@ -215,17 +215,17 @@ fn add_output_options<'a, 'b>(app: App<'a, 'b>) -> App<'a, 'b> {
 }
 
 pub fn get_int_arg<T: FromStr>(matches: &ArgMatches, key: &str) -> Result<T> {
-    let display_key = key.replace("_", "-");
-    Ok(matches
+    let display_key = key.replace('_', "-");
+    matches
         .value_of(key)
         .ok_or_else(|| anyhow!("Bad {}", display_key))?
         .parse::<T>()
-        .map_err(|_| anyhow!("{} must be a positive integer", display_key))?)
+        .map_err(|_| anyhow!("{} must be a positive integer", display_key))
 }
 
 pub fn get_float_arg(matches: &ArgMatches, key: &str, limit: f64) -> Result<f64> {
-    let display_key = key.replace("_", "-");
-    Ok(matches
+    let display_key = key.replace('_', "-");
+    matches
         .value_of(key)
         .ok_or_else(|| anyhow!("Bad {}", display_key))?
         .parse::<f64>()
@@ -235,7 +235,7 @@ pub fn get_float_arg(matches: &ArgMatches, key: &str, limit: f64) -> Result<f64>
                 return Ok(r);
             }
             bail!("{} must be between 0 and {}", display_key, limit)
-        })?)
+        })
 }
 
 pub fn parse_filter_options(matches: &ArgMatches, kmer_length: u8) -> Result<FilterParams> {

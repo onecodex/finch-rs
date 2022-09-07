@@ -75,7 +75,7 @@ fn run() -> Result<()> {
                         Ok(())
                     },
                     output,
-                    &file_ext,
+                    file_ext,
                 )?;
             } else {
                 // special case for "sketching in place"
@@ -102,7 +102,7 @@ fn run() -> Result<()> {
 
                 for sketch in &all_sketches {
                     if query_names.contains(&sketch.name) {
-                        query_sketches.push(&sketch);
+                        query_sketches.push(sketch);
                     }
                 }
             } else {
@@ -271,8 +271,8 @@ fn parse_mash_files(matches: &ArgMatches) -> Result<Vec<Sketch>> {
 
         // now do the filtering for the first sketch file
         if filters.filter_on == Some(true) {
-            for mut sketch in &mut sketches {
-                filters.filter_sketch(&mut sketch);
+            for sketch in &mut sketches {
+                filters.filter_sketch(sketch);
             }
         }
 
@@ -295,8 +295,8 @@ fn parse_mash_files(matches: &ArgMatches) -> Result<Vec<Sketch>> {
             }
             sketches.extend(extra_sketches);
             if filters.filter_on == Some(true) {
-                for mut sketch in &mut sketches {
-                    filters.filter_sketch(&mut sketch);
+                for sketch in &mut sketches {
+                    filters.filter_sketch(sketch);
                 }
             }
         }
@@ -324,7 +324,7 @@ fn calc_sketch_distances(
             if query_sketch == &ref_sketch {
                 continue;
             }
-            let distance = distance(&query_sketch, &ref_sketch, old_mode).unwrap();
+            let distance = distance(query_sketch, ref_sketch, old_mode).unwrap();
             if distance.mash_distance <= max_distance {
                 distances.push(distance);
             }

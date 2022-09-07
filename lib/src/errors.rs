@@ -33,7 +33,7 @@ macro_rules! bail {
         return Err($crate::errors::FinchError::Message($e.to_owned()));
     };
     ($fmt:expr, $($arg:tt)*) => {
-        return Err($crate::errors::FinchError::Message(format!($fmt, $($arg)*)));
+        return Err($crate::errors::FinchError::Message(format!($fmt, $($arg)*)))
     };
 }
 
