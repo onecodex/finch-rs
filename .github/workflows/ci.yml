@@ -45,7 +45,7 @@ jobs:
   tests:
     strategy:
       matrix:
-        rust-version: [1.48.0, stable]
+        rust-version: [1.49.0, stable]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
