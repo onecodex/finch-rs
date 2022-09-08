@@ -2,7 +2,6 @@ use std::collections::{HashSet, VecDeque};
 use std::fs::File;
 
 use numpy::{PyArray, PyArray1, PyArray2};
-use pyo3::class::*;
 use pyo3::exceptions::{PyIndexError, PyKeyError};
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyBytes, PyDict, PyList, PyTuple, PyType};
@@ -132,6 +131,48 @@ impl Multisketch {
         Ok(Multisketch { sketches })
     }
 
+    fn __repr__(&self) -> PyResult<String> {
+        let n_sketches = self.sketches.len();
+        let sketch_plural = if n_sketches == 1 {
+            "sketch"
+        } else {
+            "sketches"
+        };
+        Ok(format!("<Multisketch ({} {})>", n_sketches, sketch_plural))
+    }
+
+    fn __len__(&self) -> PyResult<usize> {
+        Ok(self.sketches.len())
+    }
+
+    fn __iter__(slf: PyRefMut<Self>) -> PyResult<SketchIter> {
+        let sketches = slf.sketches.iter().map(|s| s.clone().into()).collect();
+        Ok(SketchIter { sketches })
+    }
+
+    fn __getitem__(&self, key: &PyAny) -> PyResult<Sketch> {
+        let idx = _get_sketch_index(&self.sketches, key)?;
+        Ok(self.sketches[idx].clone().into())
+    }
+
+    fn __delitem__(&mut self, key: &PyAny) -> PyResult<()> {
+        // TODO: if we ever allow sketches to just reference back to the
+        // Multisketch this function could prove problematic?
+        let idx = _get_sketch_index(&self.sketches, key)?;
+        self.sketches.remove(idx);
+        Ok(())
+    }
+
+    fn __contains__(&self, key: &str) -> PyResult<bool> {
+        // TODO: also use the same cache as above?
+        for sketch in &self.sketches {
+            if sketch.name == key {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
     /// save(self, filename: str)
     ///
     /// Save the collection of sketches to the filename provided. The format
@@ -224,36 +265,15 @@ impl Multisketch {
     // }
 }
 
-#[pyproto]
-impl PyIterProtocol for Multisketch {
-    fn __iter__(slf: PyRefMut<Self>) -> PyResult<SketchIter> {
-        let sketches = slf.sketches.iter().map(|s| s.clone().into()).collect();
-        Ok(SketchIter { sketches })
-    }
-}
-
 #[pyclass]
 pub struct SketchIter {
     sketches: VecDeque<Sketch>,
 }
 
-#[pyproto]
-impl PyIterProtocol for SketchIter {
+#[pymethods]
+impl SketchIter {
     fn __next__(mut slf: PyRefMut<Self>) -> PyResult<Option<Sketch>> {
         Ok(slf.sketches.pop_front())
-    }
-}
-
-#[pyproto]
-impl PyObjectProtocol for Multisketch {
-    fn __repr__(&self) -> PyResult<String> {
-        let n_sketches = self.sketches.len();
-        let sketch_plural = if n_sketches == 1 {
-            "sketch"
-        } else {
-            "sketches"
-        };
-        Ok(format!("<Multisketch ({} {})>", n_sketches, sketch_plural))
     }
 }
 
@@ -282,39 +302,6 @@ fn _get_sketch_index(sketches: &[SketchRs], key: &PyAny) -> PyResult<usize> {
         Err(PyErr::new::<FinchError, _>(
             "key is not a string or integer",
         ))
-    }
-}
-
-#[pyproto]
-impl PyMappingProtocol for Multisketch {
-    fn __len__(&self) -> PyResult<usize> {
-        Ok(self.sketches.len())
-    }
-
-    fn __getitem__(&self, key: &PyAny) -> PyResult<Sketch> {
-        let idx = _get_sketch_index(&self.sketches, key)?;
-        Ok(self.sketches[idx].clone().into())
-    }
-
-    fn __delitem__(&mut self, key: &PyAny) -> PyResult<()> {
-        // TODO: if we ever allow sketches to just reference back to the
-        // Multisketch this function could prove problematic?
-        let idx = _get_sketch_index(&self.sketches, key)?;
-        self.sketches.remove(idx);
-        Ok(())
-    }
-}
-
-#[pyproto]
-impl PySequenceProtocol for Multisketch {
-    fn __contains__(&self, key: &str) -> PyResult<bool> {
-        // TODO: also use the same cache as above?
-        for sketch in &self.sketches {
-            if sketch.name == key {
-                return Ok(true);
-            }
-        }
-        Ok(false)
     }
 }
 
@@ -348,6 +335,14 @@ impl Sketch {
             filter_params: FilterParams::default(),
         };
         Sketch { s }
+    }
+
+    fn __repr__(&self) -> PyResult<String> {
+        Ok(format!("<Sketch \"{}\">", self.s.name.clone()))
+    }
+
+    fn __len__(&self) -> PyResult<usize> {
+        Ok(self.s.len())
     }
 
     #[getter]
@@ -388,21 +383,21 @@ impl Sketch {
 
     #[getter]
     fn get_hashes(&self) -> PyResult<Vec<(u64, PyObject, u32, u32)>> {
-        let gil = Python::acquire_gil();
-        let py = gil.python();
-        self.s
-            .hashes
-            .clone()
-            .into_iter()
-            .map(|i| {
-                Ok((
-                    i.hash,
-                    PyBytes::new(py, &i.kmer).into(),
-                    i.count,
-                    i.extra_count,
-                ))
-            })
-            .collect()
+        Python::with_gil(|py| {
+            self.s
+                .hashes
+                .clone()
+                .into_iter()
+                .map(|i| {
+                    Ok((
+                        i.hash,
+                        PyBytes::new(py, &i.kmer).into(),
+                        i.count,
+                        i.extra_count,
+                    ))
+                })
+                .collect()
+        })
     }
 
     // TODO: there are a lot of issues to fix in here; we should also try to destructure the
@@ -577,18 +572,14 @@ impl Sketch {
         let sketch_kmers: Vec<&[KmerCount]> = sketches.iter().map(|s| &s.s.hashes[..]).collect();
         let result = minmer_matrix(&self.s.hashes, &sketch_kmers);
 
-        let gil = Python::acquire_gil();
-        let py = gil.python();
-        Ok(PyArray::from_owned_array(py, result).to_owned())
+        Python::with_gil(|py| Ok(PyArray::from_owned_array(py, result).to_owned()))
     }
 
     #[getter]
     pub fn get_counts(&self) -> PyResult<Py<PyArray1<i32>>> {
         let result = self.s.hashes.iter().map(|k| k.count as i32);
 
-        let gil = Python::acquire_gil();
-        let py = gil.python();
-        Ok(PyArray::from_exact_iter(py, result).to_owned())
+        Python::with_gil(|py| Ok(PyArray::from_iter(py, result).to_owned()))
     }
 
     #[setter]
@@ -621,20 +612,6 @@ impl Sketch {
     /// Create a copy of the current Sketch.
     pub fn copy(&self) -> PyResult<Sketch> {
         Ok(Sketch { s: self.s.clone() })
-    }
-}
-
-#[pyproto]
-impl PyObjectProtocol for Sketch {
-    fn __repr__(&self) -> PyResult<String> {
-        Ok(format!("<Sketch \"{}\">", self.s.name.clone()))
-    }
-}
-
-#[pyproto]
-impl PyMappingProtocol for Sketch {
-    fn __len__(&self) -> PyResult<usize> {
-        Ok(self.s.len())
     }
 }
 

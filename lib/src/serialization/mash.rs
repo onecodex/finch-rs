@@ -10,7 +10,7 @@ use crate::serialization::Sketch;
 use crate::sketch_schemes::{ItemHash, KmerCount, SketchParams};
 
 pub fn write_mash_file(mut file: &mut dyn Write, sketches: &[Sketch]) -> FinchResult<()> {
-    let params = SketchParams::from_sketches(&sketches)?;
+    let params = SketchParams::from_sketches(sketches)?;
 
     let mut message = message::Builder::new_default();
     {

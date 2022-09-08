@@ -156,7 +156,7 @@ impl SketchParams {
         let first_params = sketches[0].sketch_params.clone();
         for (ix, sketch) in sketches.iter().enumerate().skip(1) {
             let params = &sketch.sketch_params;
-            if let Some((mismatched_param, v1, v2)) = first_params.check_compatibility(&params) {
+            if let Some((mismatched_param, v1, v2)) = first_params.check_compatibility(params) {
                 bail!(
                     "First sketch has {} {}, but sketch {} has {0} {}",
                     mismatched_param,

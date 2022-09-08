@@ -50,6 +50,18 @@ impl JsonSketch {
     }
 }
 
+impl From<Sketch> for JsonSketch {
+    fn from(s: Sketch) -> Self {
+        JsonSketch::new(
+            &s.name,
+            s.seq_length,
+            s.num_valid_kmers,
+            s.hashes,
+            &s.filter_params.to_serialized(),
+        )
+    }
+}
+
 impl Serialize for JsonSketch {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -101,7 +113,7 @@ impl<'de> Deserialize<'de> for JsonSketch {
         for i in 0..jsketch.hashes.len() {
             let hash = jsketch.hashes[i].0;
             let kmer = match &mut jsketch.kmers {
-                Some(v) => mem::replace(&mut v[i], String::new()).into_bytes(),
+                Some(v) => mem::take(&mut v[i]).into_bytes(),
                 None => Vec::new(),
             };
             let count = match &jsketch.counts {
@@ -187,7 +199,7 @@ impl MultiSketch {
 
     pub fn from_sketches(sketches: &[Sketch]) -> FinchResult<Self> {
         let json_sketches: Vec<JsonSketch> = sketches.iter().map(|x| (*x).clone().into()).collect();
-        let sketch_params = SketchParams::from_sketches(&sketches)?;
+        let sketch_params = SketchParams::from_sketches(sketches)?;
         // TODO: the scale isn't actually harmonized between the sketches at
         // this point; it probably should be?
         let (hash_type, hash_bits, hash_seed, scale) = sketch_params.hash_info();

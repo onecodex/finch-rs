@@ -9,7 +9,7 @@ This repository provides a library and command-line interface that reimplements 
 ## Getting Started ##
 
 ### Installation ###
-You may build Finch from source, which requires Rust >= `1.43`. Rust's Cargo package manager (see [rustup](https://www.rustup.rs) for Cargo installation instructions) can automatically build and install Finch with `cargo install finch_cli`. 
+You may build Finch from source, which requires Rust >= `1.48`. Rust's Cargo package manager (see [rustup](https://www.rustup.rs) for Cargo installation instructions) can automatically build and install Finch with `cargo install finch_cli`.
 If you require python bindings, you must take extra steps (see [python support](#python-support)). Alternatively, [download a prebuilt binary](https://github.com/onecodex/finch-rs/releases).
 
 ### Example Usage ###
@@ -179,12 +179,12 @@ You can compile Finch into a python library with:
 ```bash
 pip install maturin
 cd lib
-maturin develop --cargo-extra-args="--features=python" --release --strip
+maturin build --features=python --release --strip
 # or maturin develop, etc
 # to cross-compile linux wheels:
 cp ../README.md .
-# and edit the readme key of config.toml
-docker run --rm -v $(pwd):/io konstin2/maturin:master build --cargo-extra-args="--features=python" --release --strip
+# and edit the `readme` key of Cargo.toml
+docker run --rm -v $(pwd):/io ghcr.io/pyo3/maturin:main build --features=python --release --strip --interpreter=python3.10 --compatibility=manylinux2010
 ```
 
 Then, e.g. to calculate the similarities between two E. coli:

@@ -39,14 +39,8 @@ impl<T> PartialOrd for HashedItem<T> {
 
 /// If we're using a `HashMap` where the keys themselves are hashes, it's
 /// a little silly to re-hash them. That's where the `NoHashHasher` comes in.
+#[derive(Default)]
 pub struct NoHashHasher(u64);
-
-impl Default for NoHashHasher {
-    #[inline]
-    fn default() -> NoHashHasher {
-        NoHashHasher(0x0000_0000_0000_0000)
-    }
-}
 
 impl Hasher for NoHashHasher {
     #[inline]

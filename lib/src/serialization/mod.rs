@@ -64,18 +64,6 @@ impl Sketch {
     }
 }
 
-impl Into<JsonSketch> for Sketch {
-    fn into(self) -> JsonSketch {
-        JsonSketch::new(
-            &self.name,
-            self.seq_length,
-            self.num_valid_kmers,
-            self.hashes,
-            &self.filter_params.to_serialized(),
-        )
-    }
-}
-
 fn set_sketch_params(mut cap_sketch_params: sketch_params::Builder, sketch_params: &SketchParams) {
     match *sketch_params {
         SketchParams::Mash {
@@ -175,7 +163,7 @@ pub fn write_finch_file(mut file: &mut dyn Write, sketches: &[Sketch]) -> FinchR
 
         let sketch_params = &sketch.sketch_params;
         let cap_sketch_params = cap_sketch.reborrow().init_sketch_params();
-        set_sketch_params(cap_sketch_params, &sketch_params);
+        set_sketch_params(cap_sketch_params, sketch_params);
     }
 
     capnp_serialize::write_message(&mut file, &message)?;

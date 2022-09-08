@@ -42,7 +42,7 @@ pub fn sketch_files(
                 Box::new(File::open(&Path::new(filename))?)
             };
             // sketch!
-            Ok(sketch_stream(reader, filename, sketch_params, &filters)?)
+            sketch_stream(reader, filename, sketch_params, filters)
         })
         .collect();
     sketches
