@@ -280,7 +280,7 @@ dependencies = [
 
 [[package]]
 name = "finch"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "bincode",
  "capnp",
