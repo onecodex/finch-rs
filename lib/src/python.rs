@@ -636,12 +636,19 @@ impl From<SketchRs> for Sketch {
 ///     final_size: int,
 ///     kmer_length: int,
 ///     filter: bool,
-///     seed: int
+///     seed: int,
+///     no_strict: bool
 /// ) -> Sketch
 /// ---
 ///
 /// From the FASTA or FASTQ file path, create a Sketch.
-#[pyfunction(n_hashes = 1000, kmer_length = 21, filter = true, seed = 0)]
+#[pyfunction(
+    n_hashes = 1000,
+    kmer_length = 21,
+    filter = true,
+    seed = 0,
+    no_strict = false
+)]
 pub fn sketch_file(
     filename: &str,
     n_hashes: usize,
@@ -649,12 +656,13 @@ pub fn sketch_file(
     kmer_length: u8,
     filter: bool,
     seed: u64,
+    no_strict: bool,
 ) -> PyResult<Sketch> {
     // TODO: allow more filter customization?
     let sketch_params = SketchParams::Mash {
         kmers_to_sketch: n_hashes,
         final_size: final_size.unwrap_or(n_hashes),
-        no_strict: false,
+        no_strict: no_strict,
         kmer_length,
         hash_seed: seed,
     };
