@@ -10,7 +10,7 @@ This repository provides a library and command-line interface that reimplements 
 
 ### Installation ###
 You may build Finch from source, which requires Rust >= `1.49`. Rust's Cargo package manager (see [rustup](https://www.rustup.rs) for Cargo installation instructions) can automatically build and install Finch with `cargo install finch_cli`.
-If you require python bindings, you must take extra steps (see [python support](#python-support)). Alternatively, [download a prebuilt binary](https://github.com/onecodex/finch-rs/releases).
+If you require python bindings, you must take extra steps (see [python support](#python-support)). Alternatively, [download a prebuilt binary](https://github.com/onecodex/finch-rs/releases) or install from [PyPi](https://pypi.org/project/finch-sketch/) `pip install finch-sketch`.
 
 ### Example Usage ###
 To get started, we first compute sketches for several FASTA or FASTQ files. These sketches are compact, sampled representations of the underlying genomic data, and what allow `finch` to rapidly estimate distances between datasets. Sketching files uses the `finch sketch` command:
@@ -174,6 +174,13 @@ Notes:
 - <sup>1</sup> Please see, however, [this issue tracking interoperability](https://github.com/marbl/Mash/issues/27) and note that other implementations may use a different seed value.
 
 ## Python Support ##
+
+You can install Finch using Pip:
+
+```bash
+pip install finch-sketch
+```
+
 You can compile Finch into a python library with:
 
 ```bash
