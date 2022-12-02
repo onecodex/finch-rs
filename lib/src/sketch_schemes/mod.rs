@@ -22,7 +22,7 @@ pub struct KmerCount {
 }
 
 pub trait SketchScheme {
-    fn process(&mut self, seq: SequenceRecord);
+    fn process(&mut self, seq: &SequenceRecord);
     fn total_bases_and_kmers(&self) -> (u64, u64);
     fn to_vec(&self) -> Vec<KmerCount>;
     fn parameters(&self) -> SketchParams;
