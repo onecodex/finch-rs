@@ -64,7 +64,7 @@ pub fn sketch_stream<'a>(
         if seq_type.is_none() {
             seq_type = Some(seqrec.format());
         }
-        sketcher.process(seqrec);
+        sketcher.process(&seqrec);
     }
 
     // disable filtering for FASTA files unless it was explicitly specified
