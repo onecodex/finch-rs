@@ -120,7 +120,7 @@ fn get_sketch_params(cap_sketch_params: sketch_params::Reader) -> FinchResult<Sk
     })
 }
 
-pub fn write_finch_file(mut file: &mut dyn Write, sketches: &[Sketch]) -> FinchResult<()> {
+pub fn write_finch_file(file: &mut dyn Write, sketches: &[Sketch]) -> FinchResult<()> {
     let mut message = message::Builder::new_default();
     let finch_file: multisketch::Builder = message.init_root::<multisketch::Builder>();
 
@@ -166,13 +166,13 @@ pub fn write_finch_file(mut file: &mut dyn Write, sketches: &[Sketch]) -> FinchR
         set_sketch_params(cap_sketch_params, sketch_params);
     }
 
-    capnp_serialize::write_message(&mut file, &message)?;
+    capnp_serialize::write_message(file, &message)?;
     Ok(())
 }
 
-pub fn read_finch_file(mut file: &mut dyn BufRead) -> FinchResult<Vec<Sketch>> {
+pub fn read_finch_file(file: &mut dyn BufRead) -> FinchResult<Vec<Sketch>> {
     let options = *message::ReaderOptions::new().traversal_limit_in_words(Some(1024 * 1024 * 1024));
-    let reader = capnp_serialize::read_message(&mut file, options)?;
+    let reader = capnp_serialize::read_message(file, options)?;
     let cap_data: multisketch::Reader = reader.get_root::<multisketch::Reader>()?;
     let cap_sketches = cap_data.get_sketches()?;
 

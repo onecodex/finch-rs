@@ -173,7 +173,7 @@ pub fn guess_filter_threshold(sketch: &[KmerCount], filter_level: f64) -> u32 {
     let mut wgt_cutoff: usize = 0;
     let mut cum_count: u64 = 0;
     for count in &hist_data {
-        cum_count += wgt_cutoff as u64 * *count as u64;
+        cum_count += wgt_cutoff as u64 * *count;
         if cum_count as f64 > cutoff_amt {
             break;
         }

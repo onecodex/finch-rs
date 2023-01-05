@@ -229,7 +229,7 @@ impl MultiSketch {
                 name: sketch.name.clone(),
                 seq_length: sketch.seq_length.unwrap_or(0),
                 num_valid_kmers: sketch.num_valid_kmers.unwrap_or(0),
-                comment: sketch.comment.clone().unwrap_or_else(|| "".to_string()),
+                comment: sketch.comment.clone().unwrap_or_default(),
                 hashes: sketch.hashes.clone(),
                 filter_params,
                 sketch_params: sketch_params.clone(),

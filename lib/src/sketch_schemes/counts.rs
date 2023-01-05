@@ -49,7 +49,7 @@ impl SketchScheme for AllCountsSketcher {
             count += extra_count;
             let new_item = KmerCount {
                 hash: ix,
-                kmer: bitmer_to_bytes((ix as u64, self.k)),
+                kmer: bitmer_to_bytes((ix, self.k)),
                 count,
                 extra_count,
                 label: None,

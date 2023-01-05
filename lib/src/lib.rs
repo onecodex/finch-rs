@@ -39,7 +39,7 @@ pub fn sketch_files(
                 // We're not locking it so technically not thread safe
                 Box::new(stdin())
             } else {
-                Box::new(File::open(&Path::new(filename))?)
+                Box::new(File::open(Path::new(filename))?)
             };
             // sketch!
             sketch_stream(reader, filename, sketch_params, filters)
