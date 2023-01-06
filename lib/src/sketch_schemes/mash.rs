@@ -39,7 +39,7 @@ impl MashSketcher {
         let add_hash = match self.hashes.peek() {
             None => true,
             Some(old_max_hash) => {
-                (new_hash <= (*old_max_hash).hash) || (self.hashes.len() < self.size)
+                (new_hash <= old_max_hash.hash) || (self.hashes.len() < self.size)
             }
         };
 
@@ -47,8 +47,8 @@ impl MashSketcher {
             if self.counts.contains_key(&new_hash) {
                 let count = self.counts.entry(new_hash).or_insert((0, 0));
                 (*count) = (
-                    (*count).0.saturating_add(1),
-                    (*count).1.saturating_add(u32::from(extra_count)),
+                    count.0.saturating_add(1),
+                    count.1.saturating_add(u32::from(extra_count)),
                 );
             } else {
                 self.hashes.push(HashedItem {
@@ -72,7 +72,7 @@ impl SketchScheme for MashSketcher {
         for (_, kmer, is_rev_complement) in
             seq.normalize(false).canonical_kmers(self.kmer_length, &rc)
         {
-            let rc_count = if is_rev_complement { 1u8 } else { 0u8 };
+            let rc_count = u8::from(is_rev_complement);
             self.push(kmer, rc_count);
         }
     }

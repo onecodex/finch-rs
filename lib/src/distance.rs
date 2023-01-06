@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 
+#[cfg(feature = "numpy")]
 use numpy::ndarray::Array2;
 
 use crate::serialization::{Sketch, SketchDistance};
@@ -340,6 +341,7 @@ pub fn old_distance(query_sketch: &[KmerCount], ref_sketch: &[KmerCount]) -> (f6
 // TODO: maybe we want to do NNLS on these matrices in Rust? for example code, see:
 // https://github.com/igmanthony/fnnls/blob/master/src/fnnls.rs
 // (for comments about that code also see https://github.com/rust-ndarray/ndarray/issues/649 )
+#[cfg(feature = "numpy")]
 pub fn minmer_matrix<U>(ref_sketch: &[KmerCount], sketches: &[U]) -> Array2<i32>
 where
     U: AsRef<[KmerCount]>,

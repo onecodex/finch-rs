@@ -44,8 +44,8 @@ impl ScaledSketcher {
             if self.counts.contains_key(&new_hash) {
                 let count = self.counts.entry(new_hash).or_insert((0, 0));
                 (*count) = (
-                    (*count).0.saturating_add(1),
-                    (*count).1.saturating_add(u32::from(extra_count)),
+                    count.0.saturating_add(1),
+                    count.1.saturating_add(u32::from(extra_count)),
                 );
             } else {
                 self.hashes.push(HashedItem {
@@ -53,8 +53,7 @@ impl ScaledSketcher {
                     item: kmer.to_owned(),
                 });
                 self.counts.insert(new_hash, (1, u32::from(extra_count)));
-                if self.hashes.len() > self.size
-                    && (*self.hashes.peek().unwrap()).hash > self.max_hash
+                if self.hashes.len() > self.size && self.hashes.peek().unwrap().hash > self.max_hash
                 {
                     let hash = self.hashes.pop().unwrap();
                     let _ = self.counts.remove(&hash.hash).unwrap();
@@ -71,7 +70,7 @@ impl SketchScheme for ScaledSketcher {
         for (_, kmer, is_rev_complement) in
             seq.normalize(false).canonical_kmers(self.kmer_length, &rc)
         {
-            let rc_count = if is_rev_complement { 1u8 } else { 0u8 };
+            let rc_count = u8::from(is_rev_complement);
             self.push(kmer, rc_count);
         }
     }

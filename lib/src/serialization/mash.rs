@@ -9,7 +9,7 @@ use crate::serialization::mash_capnp::min_hash;
 use crate::serialization::Sketch;
 use crate::sketch_schemes::{ItemHash, KmerCount, SketchParams};
 
-pub fn write_mash_file(mut file: &mut dyn Write, sketches: &[Sketch]) -> FinchResult<()> {
+pub fn write_mash_file(file: &mut dyn Write, sketches: &[Sketch]) -> FinchResult<()> {
     let params = SketchParams::from_sketches(sketches)?;
 
     let mut message = message::Builder::new_default();
@@ -43,7 +43,7 @@ pub fn write_mash_file(mut file: &mut dyn Write, sketches: &[Sketch]) -> FinchRe
                     .reborrow()
                     .init_hashes64(sketch.hashes.len() as u32);
                 for (j, hash) in sketch.hashes.iter().enumerate() {
-                    mash_hashes.reborrow().set(j as u32, hash.hash as u64);
+                    mash_hashes.reborrow().set(j as u32, hash.hash);
                 }
             }
             let mash_counts = mash_sketch.init_counts32(sketch.hashes.len() as u32);
@@ -53,13 +53,13 @@ pub fn write_mash_file(mut file: &mut dyn Write, sketches: &[Sketch]) -> FinchRe
         }
     }
 
-    capnp_serialize::write_message(&mut file, &message)?;
+    capnp_serialize::write_message(file, &message)?;
     Ok(())
 }
 
-pub fn read_mash_file(mut file: &mut dyn BufRead) -> FinchResult<Vec<Sketch>> {
+pub fn read_mash_file(file: &mut dyn BufRead) -> FinchResult<Vec<Sketch>> {
     let options = *message::ReaderOptions::new().traversal_limit_in_words(Some(1024 * 1024 * 1024));
-    let reader = capnp_serialize::read_message(&mut file, options)?;
+    let reader = capnp_serialize::read_message(file, options)?;
     let mash_data: min_hash::Reader = reader.get_root::<min_hash::Reader>()?;
 
     let kmers_to_sketch = 0;
