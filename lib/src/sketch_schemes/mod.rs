@@ -1,5 +1,5 @@
 pub mod counts;
-mod hashing;
+pub(crate) mod hashing;
 pub mod mash;
 pub mod scaled;
 
