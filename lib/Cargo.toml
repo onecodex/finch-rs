@@ -34,8 +34,3 @@ python = ["pyo3", "pyo3/extension-module", "numpy"]
 [lib]
 crate-type=["cdylib", "rlib"]
 name = "finch"
-
-[package.metadata.maturin]
-name = "finch-sketch"
-maintainer = "One Codex"
-classifier = ["Intended Audience :: Science/Research", "License :: OSI Approved :: MIT License", "Topic :: Scientific/Engineering :: Bio-Informatics"]
