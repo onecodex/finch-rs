@@ -52,6 +52,12 @@ impl Hasher for NoHashHasher {
                 + u64::from(bytes[3]),
         );
     }
+
+    #[inline]
+    fn write_usize(&mut self, i: usize) {
+        self.0 = i as u64;
+    }
+
     fn finish(&self) -> u64 {
         self.0
     }

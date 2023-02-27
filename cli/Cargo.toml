@@ -1,6 +1,6 @@
 [package]
 name = "finch_cli"
-version = "0.4.1"
+version = "0.5.0"
 authors = ["One Codex <vincent@onecodex.com>"]
 description = "An implementation of min-wise independent permutation locality sensitive hashing ('MinHashing') for genomic data and command-line utility for manipulation."
 keywords = ["minhash", "bioinformatics", "sketches"]
@@ -16,7 +16,7 @@ path = "src/main.rs"
 
 [dependencies]
 clap = "2.33.0"
-finch = { version = "0.5", path = "../lib" }
+finch = { version = "0.6", path = "../lib" }
 serde_json = "1"
 anyhow = "1"
 
