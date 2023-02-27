@@ -1,6 +1,8 @@
 use std::cmp;
 use std::collections::HashMap;
+use std::hash::BuildHasherDefault;
 
+use crate::sketch_schemes::hashing::NoHashHasher;
 use crate::sketch_schemes::KmerCount;
 
 pub fn cardinality(sketch: &[KmerCount]) -> Result<u64, &'static str> {
@@ -25,7 +27,8 @@ pub fn cardinality(sketch: &[KmerCount]) -> Result<u64, &'static str> {
 ///
 pub fn hist(sketch: &[KmerCount]) -> Vec<u64> {
     let mut max_count = 0;
-    let mut counts: HashMap<usize, u64> = HashMap::with_capacity(150_000);
+    let mut counts: HashMap<usize, u64, BuildHasherDefault<NoHashHasher>> =
+        HashMap::with_capacity_and_hasher(150_000, BuildHasherDefault::default());
     for kmer in sketch {
         max_count = cmp::max(max_count, u64::from(kmer.count));
         counts
