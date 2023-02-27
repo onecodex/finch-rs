@@ -3,7 +3,7 @@ mod hashing;
 pub mod mash;
 pub mod scaled;
 
-use needletail::parser::SequenceRecord;
+use needletail::Sequence;
 use serde::{Deserialize, Serialize};
 
 use crate::bail;
@@ -22,7 +22,9 @@ pub struct KmerCount {
 }
 
 pub trait SketchScheme {
-    fn process(&mut self, seq: &SequenceRecord);
+    fn process<'s, 'a: 's, 'b>(&'a mut self, seq: &'s dyn Sequence<'b>)
+    where
+        's: 'b;
     fn total_bases_and_kmers(&self) -> (u64, u64);
     fn to_vec(&self) -> Vec<KmerCount>;
     fn parameters(&self) -> SketchParams;

@@ -2,7 +2,6 @@ use needletail::bitkmer::{bitmer_to_bytes, reverse_complement};
 use needletail::Sequence;
 
 use crate::sketch_schemes::{KmerCount, SketchParams, SketchScheme};
-use needletail::parser::SequenceRecord;
 
 #[derive(Clone)]
 pub struct AllCountsSketcher {
@@ -23,7 +22,10 @@ impl AllCountsSketcher {
 }
 
 impl SketchScheme for AllCountsSketcher {
-    fn process(&mut self, seq: &SequenceRecord) {
+    fn process<'s, 'a: 's, 'b>(&'a mut self, seq: &'s dyn Sequence<'b>)
+    where
+        's: 'b,
+    {
         for (_, kmer, _) in seq.normalize(false).bit_kmers(self.k, false) {
             self.counts[kmer.0 as usize] = self.counts[kmer.0 as usize].saturating_add(1);
         }

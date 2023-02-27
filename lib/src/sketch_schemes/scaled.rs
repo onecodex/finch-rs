@@ -6,7 +6,6 @@ use needletail::Sequence;
 
 use crate::sketch_schemes::hashing::{hash_f, HashedItem, NoHashHasher};
 use crate::sketch_schemes::{ItemHash, KmerCount, SketchParams, SketchScheme};
-use needletail::parser::SequenceRecord;
 
 #[derive(Clone, Debug)]
 pub struct ScaledSketcher {
@@ -64,7 +63,10 @@ impl ScaledSketcher {
 }
 
 impl SketchScheme for ScaledSketcher {
-    fn process(&mut self, seq: &SequenceRecord) {
+    fn process<'s, 'a: 's, 'b>(&'a mut self, seq: &'s dyn Sequence<'b>)
+    where
+        's: 'b,
+    {
         self.total_bases += seq.sequence().len() as u64;
         let rc = seq.reverse_complement();
         for (_, kmer, is_rev_complement) in
@@ -101,7 +103,7 @@ impl SketchScheme for ScaledSketcher {
         SketchParams::Scaled {
             kmers_to_sketch: self.size,
             kmer_length: self.kmer_length,
-            scale: 1. / (u64::max_value() as f64 / self.max_hash as f64),
+            scale: 1. / (u64::MAX as f64 / self.max_hash as f64),
             hash_seed: self.seed,
         }
     }
