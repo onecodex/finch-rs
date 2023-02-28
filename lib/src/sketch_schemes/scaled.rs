@@ -63,9 +63,10 @@ impl ScaledSketcher {
 }
 
 impl SketchScheme for ScaledSketcher {
-    fn process<'s, 'a: 's, 'b>(&'a mut self, seq: &'s dyn Sequence<'b>)
+    fn process<'seq, 'a, 'inner>(&'a mut self, seq: &'seq dyn Sequence<'inner>)
     where
-        's: 'b,
+        'a: 'seq,
+        'seq: 'inner,
     {
         self.total_bases += seq.sequence().len() as u64;
         let rc = seq.reverse_complement();
