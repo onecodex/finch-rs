@@ -22,9 +22,10 @@ impl AllCountsSketcher {
 }
 
 impl SketchScheme for AllCountsSketcher {
-    fn process<'s, 'a: 's, 'b>(&'a mut self, seq: &'s dyn Sequence<'b>)
+    fn process<'seq, 'a, 'inner>(&'a mut self, seq: &'seq dyn Sequence<'inner>)
     where
-        's: 'b,
+        'a: 'seq,
+        'seq: 'inner,
     {
         for (_, kmer, _) in seq.normalize(false).bit_kmers(self.k, false) {
             self.counts[kmer.0 as usize] = self.counts[kmer.0 as usize].saturating_add(1);
