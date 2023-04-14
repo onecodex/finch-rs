@@ -27,4 +27,4 @@ COPY --from=builder \
     /home/rust/finch/target/x86_64-unknown-linux-musl/release/finch* \
     /usr/local/bin/
 
-CMD /bin/bash
+CMD ["/bin/bash"]
