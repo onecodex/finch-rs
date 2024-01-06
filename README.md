@@ -18,7 +18,7 @@ To compile from source:
 
 ```sh
 # from finch-rs
-cargo +nightly-2023-06-28 build --release
+cargo +stable build --release
 ```
 
 ### Example Usage ###
