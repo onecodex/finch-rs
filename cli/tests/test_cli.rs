@@ -93,6 +93,20 @@ fn finch_sketch_scaled() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(sketch["kmer"], 21);
     assert_eq!(sketch["alphabet"], "ACGT");
     assert_eq!(sketch["sketchSize"], 10);
+
+    let kmers = &sketch["sketches"][0]["kmers"];
+
+    assert_eq!(kmers[0], "ATGCTAGCTACGTAACGTCGC");
+    assert_eq!(kmers[1], "CAGTCGATCGATCGTAGCTGA");
+    assert_eq!(kmers[2], "CTCAGATGCTGAGCCGGTCTA");
+    assert_eq!(kmers[3], "GCTAGCTAGCATCGCTAGCTA");
+    assert_eq!(kmers[4], "GACTAGCTAGCTAGCTAGCGA");
+    assert_eq!(kmers[5], "CGCTAGCTACGATCGATCGAC");
+    assert_eq!(kmers[6], "TAATTTATACGGGCCTATTAA");
+    assert_eq!(kmers[7], "GCATCAGCTAGCATCGCTGTA");
+    assert_eq!(kmers[8], "AGCCGGTCTACTACTACACAT");
+    assert_eq!(kmers[9], "AAGGCCTAACTTAATAGGCCC");
+
     //assert_eq!(sketch["max_hash"], usize::max_value() / 1000);
     assert_eq!(sketch["hashSeed"], 0);
 
