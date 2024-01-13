@@ -71,7 +71,7 @@ impl SketchScheme for MashSketcher {
         'seq: 'inner,
     {
         self.total_bases += seq.sequence().len() as u64;
-        let rc = seq.reverse_complement();
+        let rc = seq.normalize(false).reverse_complement();
         for (_, kmer, is_rev_complement) in
             seq.normalize(false).canonical_kmers(self.kmer_length, &rc)
         {
