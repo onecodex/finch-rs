@@ -72,9 +72,7 @@ impl SketchScheme for ScaledSketcher {
         let norm_seq = seq.normalize(false);
 
         let rc = norm_seq.reverse_complement();
-        for (_, kmer, is_rev_complement) in
-            norm_seq.canonical_kmers(self.kmer_length, &rc)
-        {
+        for (_, kmer, is_rev_complement) in norm_seq.canonical_kmers(self.kmer_length, &rc) {
             let rc_count = u8::from(is_rev_complement);
             self.push(kmer, rc_count);
         }
