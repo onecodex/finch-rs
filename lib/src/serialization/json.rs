@@ -9,7 +9,6 @@ use serde::{Deserialize, Serialize};
 use crate::bail;
 use crate::errors::FinchResult;
 use crate::filtering::FilterParams;
-pub use crate::serialization::mash::{read_mash_file, write_mash_file};
 use crate::serialization::Sketch;
 use crate::sketch_schemes::{KmerCount, SketchParams};
 
