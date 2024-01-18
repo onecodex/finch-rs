@@ -58,7 +58,11 @@ pub fn write_mash_file(file: &mut dyn Write, sketches: &[Sketch]) -> FinchResult
 }
 
 pub fn read_mash_file(file: &mut dyn BufRead) -> FinchResult<Vec<Sketch>> {
-    let options = *message::ReaderOptions::new().traversal_limit_in_words(Some(1024 * 1024 * 1024));
+    let options = *message::ReaderOptions::new().traversal_limit_in_words(
+        // measured in words
+        // 1 word = 8 bytes
+        Some(2 * 1024 * 1024 * 1024),
+    );
     let reader = capnp_serialize::read_message(file, options)?;
     let mash_data: min_hash::Reader = reader.get_root::<min_hash::Reader>()?;
 
