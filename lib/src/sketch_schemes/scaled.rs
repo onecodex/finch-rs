@@ -1,6 +1,5 @@
 use std::collections::{BinaryHeap, HashMap};
 use std::hash::BuildHasherDefault;
-use std::usize;
 
 use needletail::Sequence;
 
@@ -29,7 +28,7 @@ impl ScaledSketcher {
             total_kmers: 0,
             total_bases: 0,
             size,
-            max_hash: u64::max_value() / iscale,
+            max_hash: u64::MAX / iscale,
             seed,
         }
     }

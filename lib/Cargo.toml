@@ -1,6 +1,6 @@
 [package]
 name = "finch"
-version = "0.6.1"
+version = "0.6.2"
 authors = ["One Codex <vincent@onecodex.com>"]
 description = "An implementation of min-wise independent permutation locality sensitive hashing ('MinHashing') for genomic data and command-line utility for manipulation."
 keywords = ["minhash", "bioinformatics", "sketches"]
