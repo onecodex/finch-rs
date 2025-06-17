@@ -17,7 +17,7 @@ If you require python bindings, you must take extra steps (see [python support](
 To build wheels locally, run:
 
 ```sh
-uv venv --python 3.11 #
+uv venv --python 3.11
 source .venv/bin/activate
 uv build
 
