@@ -31,11 +31,7 @@ impl FilterParams {
                 Some(u32::max(l, sketch.filter_params.abun_filter.0.unwrap_or(0))),
                 Some(u32::min(
                     h,
-                    sketch
-                        .filter_params
-                        .abun_filter
-                        .1
-                        .unwrap_or(u32::max_value()),
+                    sketch.filter_params.abun_filter.1.unwrap_or(u32::MAX),
                 )),
             ),
             (Some(l), None) => (
@@ -46,11 +42,7 @@ impl FilterParams {
                 None,
                 Some(u32::min(
                     h,
-                    sketch
-                        .filter_params
-                        .abun_filter
-                        .1
-                        .unwrap_or(u32::max_value()),
+                    sketch.filter_params.abun_filter.1.unwrap_or(u32::MAX),
                 )),
             ),
             (None, None) => (None, None),
@@ -341,7 +333,7 @@ pub fn filter_abundance(
 ) -> Vec<KmerCount> {
     let mut filtered = Vec::new();
     let lo_threshold = low.unwrap_or(0u32);
-    let hi_threshold = high.unwrap_or(u32::max_value());
+    let hi_threshold = high.unwrap_or(u32::MAX);
     for kmer in sketch {
         if lo_threshold <= kmer.count && kmer.count <= hi_threshold {
             filtered.push(kmer.clone());

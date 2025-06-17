@@ -1,6 +1,5 @@
 use std::collections::{BinaryHeap, HashMap};
 use std::hash::BuildHasherDefault;
-use std::usize;
 
 use needletail::Sequence;
 

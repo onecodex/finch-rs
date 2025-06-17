@@ -97,7 +97,7 @@ pub fn raw_distance(
     // at this point we've exhausted one of the two sketches, but we may have
     // more counts in the other to compare if these were scaled sketches
     if scale > 0. {
-        let max_hash = u64::max_value() / scale.recip() as u64;
+        let max_hash = u64::MAX / scale.recip() as u64;
         while query_hashes
             .get(i)
             .map(|kmer_count| kmer_count.hash < max_hash)
@@ -122,6 +122,37 @@ pub fn raw_distance(
         common as f64 / total as f64
     };
 
+    (containment, jaccard, common, total)
+}
+
+/// This computes set statistics from one set of hashes to another.
+///
+/// Every hash in the reference set is considered while only those hashes in the
+/// query set that are in the same range as the reference set are compared. This
+/// should be a more accurate representation of the query set's containment in
+/// the reference set because we consider all of the reference set. In
+/// practice, there may be issues especially if the query is sketched to a
+/// different effective scale than the reference.
+pub fn old_distance(query_sketch: &[KmerCount], ref_sketch: &[KmerCount]) -> (f64, f64, u64, u64) {
+    let mut i: usize = 0;
+    let mut common: u64 = 0;
+    let mut total: u64 = 0;
+
+    for ref_hash in ref_sketch {
+        while (query_sketch[i].hash < ref_hash.hash) && (i < query_sketch.len() - 1) {
+            i += 1;
+        }
+
+        if query_sketch[i].hash == ref_hash.hash {
+            common += 1;
+        }
+
+        total += 1;
+    }
+
+    // Numerator is A-intersect-B, |A| is the denominator, we enforce |A| == |B|
+    let containment: f64 = common as f64 / total as f64;
+    let jaccard: f64 = common as f64 / (common + 2 * (total - common)) as f64;
     (containment, jaccard, common, total)
 }
 
@@ -304,37 +335,6 @@ mod tests {
 
         Ok(())
     }
-}
-
-/// This computes set statistics from one set of hashes to another.
-///
-/// Every hash in the reference set is considered while only those hashes in the
-/// query set that are in the same range as the reference set are compared. This
-/// should be a more accurate representation of the query set's containment in
-/// the reference set because we consider all of the reference set. In
-/// practice, there may be issues especially if the query is sketched to a
-/// different effective scale than the reference.
-pub fn old_distance(query_sketch: &[KmerCount], ref_sketch: &[KmerCount]) -> (f64, f64, u64, u64) {
-    let mut i: usize = 0;
-    let mut common: u64 = 0;
-    let mut total: u64 = 0;
-
-    for ref_hash in ref_sketch {
-        while (query_sketch[i].hash < ref_hash.hash) && (i < query_sketch.len() - 1) {
-            i += 1;
-        }
-
-        if query_sketch[i].hash == ref_hash.hash {
-            common += 1;
-        }
-
-        total += 1;
-    }
-
-    // Numerator is A-intersect-B, |A| is the denominator, we enforce |A| == |B|
-    let containment: f64 = common as f64 / total as f64;
-    let jaccard: f64 = common as f64 / (common + 2 * (total - common)) as f64;
-    (containment, jaccard, common, total)
 }
 
 // TODO: add another method like this to allow 0's in ref sketch for hashes present in sketches?

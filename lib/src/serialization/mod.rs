@@ -151,13 +151,8 @@ pub fn write_finch_file(file: &mut dyn Write, sketches: &[Sketch]) -> FinchResul
         let mut cap_filter_params = cap_sketch.reborrow().init_filter_params();
         cap_filter_params.set_filtered(sketch.filter_params.filter_on.unwrap_or(false));
         cap_filter_params.set_low_abun_filter(sketch.filter_params.abun_filter.0.unwrap_or(0));
-        cap_filter_params.set_high_abun_filter(
-            sketch
-                .filter_params
-                .abun_filter
-                .1
-                .unwrap_or(::std::u32::MAX),
-        );
+        cap_filter_params
+            .set_high_abun_filter(sketch.filter_params.abun_filter.1.unwrap_or(u32::MAX));
         cap_filter_params.set_err_filter(sketch.filter_params.err_filter);
         cap_filter_params.set_strand_filter(sketch.filter_params.strand_filter);
 
