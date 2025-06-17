@@ -8,7 +8,7 @@ maintainer = "One Codex"
 classifier = [
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
-    "Topic :: Scientific/Engineering :: Bio-Informatics"
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
 ]
 dynamic = ["version"]
 readme = "README.md"

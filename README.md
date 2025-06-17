@@ -12,6 +12,26 @@ This repository provides a library and command-line interface that reimplements 
 You may build Finch from source, which requires Rust >= `1.49`. Rust's Cargo package manager (see [rustup](https://www.rustup.rs) for Cargo installation instructions) can automatically build and install Finch with `cargo install finch_cli`.
 If you require python bindings, you must take extra steps (see [python support](#python-support)). Alternatively, [download a prebuilt binary](https://github.com/onecodex/finch-rs/releases) or install from [PyPi](https://pypi.org/project/finch-sketch/) `pip install finch-sketch`.
 
+### Development ###
+
+To build wheels locally, run:
+
+```sh
+uv venv --python 3.11 #
+source .venv/bin/activate
+uv build
+
+# or, using maturin by itself:
+
+maturin build --features python --release --strip^
+```
+
+#### Building binary wheels and pushing to PyPI
+
+There is a Github Workflow that will build Python wheels for macOS (x86 and
+ARM) and Ubuntu (x86). To run, create a new release.
+
+
 ### Example Usage ###
 To get started, we first compute sketches for several FASTA or FASTQ files. These sketches are compact, sampled representations of the underlying genomic data, and what allow `finch` to rapidly estimate distances between datasets. Sketching files uses the `finch sketch` command:
 
@@ -206,7 +226,7 @@ cont, jacc = sketch_one.compare(sketch_two)
 
 ## Cap'n Proto
 
-There is a `finch.capnp` in `src/serialization` file and the output of the MinHash schema (https://github.com/marbl/Mash/blob/54e6d66b7720035a2605a02892cad027ef3231ef/src/mash/capnp/MinHash.capnp) 
+There is a `finch.capnp` in `src/serialization` file and the output of the MinHash schema (https://github.com/marbl/Mash/blob/54e6d66b7720035a2605a02892cad027ef3231ef/src/mash/capnp/MinHash.capnp)
 + the changes by @bovee in https://github.com/bovee/Mash/blob/master/src/mash/capnp/MinHash.capnp
 
 Both are generated after installing `capnp` and `cargo install capnpc` with the following command:
