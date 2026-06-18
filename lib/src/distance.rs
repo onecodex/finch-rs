@@ -34,7 +34,7 @@ pub fn distance(
     let common_hashes = distances.2;
     let total_hashes = distances.3;
     let k = query_sketch.sketch_params.k() as f64;
-    let mash_distance: f64 = -1.0 * ((2.0 * jaccard) / (1.0 + jaccard)).ln() / k;
+    let mash_distance: f64 = -((2.0 * jaccard) / (1.0 + jaccard)).ln() / k;
     Ok(SketchDistance {
         containment,
         jaccard,
