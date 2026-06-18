@@ -33,7 +33,7 @@ impl<T> Ord for HashedItem<T> {
 
 impl<T> PartialOrd for HashedItem<T> {
     fn partial_cmp(&self, other: &HashedItem<T>) -> Option<Ordering> {
-        Some(self.cmp(&other))
+        Some(self.cmp(other))
     }
 }
 
