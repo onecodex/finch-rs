@@ -18,3 +18,8 @@ manifest-path = "lib/Cargo.toml"
 bindings = "pyo3"
 features = ["python"]
 exclude = ["lib/README.md"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
