@@ -252,7 +252,7 @@ dependencies = [
 
 [[package]]
 name = "finch"
-version = "0.6.2"
+version = "0.6.3"
 dependencies = [
  "bincode",
  "capnp",
@@ -271,7 +271,7 @@ dependencies = [
 
 [[package]]
 name = "finch_cli"
-version = "0.5.0"
+version = "0.6.3"
 dependencies = [
  "anyhow",
  "assert_cmd",
