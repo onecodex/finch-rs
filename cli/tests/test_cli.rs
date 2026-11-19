@@ -147,3 +147,31 @@ fn finch_sketch_mash() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
+#[test]
+fn finch_dist_scale_matches() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin("finch")?;
+    cmd.arg("dist")
+        .args(&["--sketch-type", "scaled"])
+        .args(&["--scale", ".001"])
+        .arg("tests/data/query.sk")
+        .arg("tests/data/query.sk");
+    cmd.assert().success();
+
+    Ok(())
+}
+
+#[test]
+fn finch_dist_scale_mismatch() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin("finch")?;
+    cmd.arg("dist")
+        .args(&["--sketch-type", "scaled"])
+        .args(&["--scale", ".01"])
+        .arg("tests/data/query.sk")
+        .arg("tests/data/query.sk");
+    cmd.assert().failure().stderr(predicate::str::contains(
+        "Specified scale 0.01 does not match 0.001",
+    ));
+
+    Ok(())
+}
